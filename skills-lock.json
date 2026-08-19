@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "evm-copilot-researcher": {
+      "source": "0xYudhishthra/evm-copilot-skills",
+      "sourceType": "github",
+      "skillPath": "evm-copilot-researcher/SKILL.md",
+      "computedHash": "a7781acece8094a63272cacd43ef26f9896636d12110c5ca5fe016e96bef9500"
+    }
+  }
+}
