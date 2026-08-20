@@ -49,6 +49,32 @@ prioritisation decision — not just for the final submission write-up.
   Capability is judged on a *credible* plan, so prefer a narrow working vertical
   slice over a broad partially-working one.
 
+### Hard constraint: readability only
+
+**Writability is off the table for this build.** Per Creditcoin's docs, writability
+"is undergoing 3rd party testing and audits" and is not yet released on Creditcoin
+testnet. Treat it as unavailable, not as a stretch goal.
+
+This means every idea must produce its value from the **readability** direction
+alone: prove a source-chain transaction or event on Creditcoin via the Block
+Prover Precompile (`0x0FD2`), then execute business logic on Creditcoin with the
+verified data. Nothing can depend on pushing a verified message back out to
+another chain.
+
+When evaluating or expanding an idea:
+
+- Reject or reshape any design whose payoff needs the outbound leg. A "round
+  trip" story (prove inbound → act → write back) collapses to its inbound half.
+- Say so explicitly and early when an idea silently assumes writability, rather
+  than designing around it and discovering the gap later.
+- Look for designs where **the destination state living on Creditcoin is the
+  point**, not a waypoint — e.g. an asset, score, credential, or position that
+  is natively useful on Creditcoin, so never leaving is a feature rather than a
+  truncation.
+- Writability may still appear in the *roadmap* as a future phase (Product
+  Vision rewards a credible forward path), but never in the demo or the
+  submission's critical path.
+
 ### Ask, don't assume
 
 When an idea's feasibility against these criteria is genuinely unclear, ask
