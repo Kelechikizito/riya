@@ -63,7 +63,7 @@ This is the standard Creditcoin app shape from `notes.md`. Four pieces:
 
 | # | Piece | Where it lives | What it does |
 |---|---|---|---|
-| 1 | **Vault contract** | Ethereum / Base | Takes Ada's deposit, puts it in Aave, harvests profit. Shouts (emits an event) every time something happens. |
+| 1 | **Vault contract** | Ethereum (Sepolia for the demo) | Takes Ada's deposit, puts it in Aave, harvests profit. Shouts (emits an event) every time something happens. |
 | 2 | **ASC** (Attestcoin Smart Contract) | Creditcoin | The bouncer. Receives proofs, asks Creditcoin's built-in prover "is this real?", and only then lets anything happen. |
 | 3 | **Loan contract** | Creditcoin | The ledger. Tracks who deposited what, who owes what, and hands out loans. Only listens to the ASC. |
 | 4 | **Watcher bot** | Off-chain (a script) | Watches Ethereum for our events, fetches the proofs, and hands them to the ASC. Just plumbing — no trust, no power. |
@@ -153,23 +153,35 @@ is worth less than the proof of it.
 
 Creditcoin's side is cheap: `notes.md` gives ≈ `2.3e-5 + 2.9e-7 × hash count` CTC,
 fractions of a cent for a recently-finalised transaction. **The binding cost is
-the harvest transaction on the source chain**, and that is an argument about which
-source chain to use:
+the harvest transaction on the source chain.**
 
-| Source chain | Harvest gas | Implied minimum deposit |
+**We cannot shop for a cheaper source chain.** Attestcoin supports Ethereum
+Mainnet and Ethereum Sepolia only — no L2s, no other L1s. So the only lever is
+**harvest less often, in bigger batches.**
+
+| | Harvest gas | What it means |
 |---|---|---|
-| Ethereum mainnet | a few dollars | ~$4,000 — far too high for a product about inclusion |
-| **Base** | cents | **~$100** |
+| **Sepolia (the demo)** | free | The floor does not bind at all. Pick small numbers and say they are testnet numbers. |
+| **Mainnet (production)** | a few dollars | `MIN_HARVEST` must be worth many times the gas — call it $100, i.e. harvest yearly rather than quarterly. |
 
-**Use Base.** The spec already said "Ethereum / Base"; this is the argument for
-picking one. Cheap gas keeps the minimum small, which keeps the inclusion story
-honest.
+- **`MIN_HARVEST`** is the constraint that actually binds. It batches dust into
+  proofs that pay for themselves, and stops anyone spamming the worker with penny
+  harvests. **$1 on Sepolia, ~$100 on Mainnet.**
+- **`MIN_DEPOSIT`** just follows from it — enough to produce one worthwhile
+  harvest a year. **$100 on Sepolia; ~$2,000 on Mainnet at 5% yield.**
 
-- **`MIN_DEPOSIT` = $100.** Below this a position cannot generate harvests worth
-  proving.
-- **`MIN_HARVEST` = $1.** Worth more than the deposit floor, because it is the
-  constraint that actually binds: it batches dust into proofs that pay for
-  themselves, and stops anyone spamming the worker with penny harvests.
+### Say the mainnet floor out loud
+
+A ~$2,000 minimum on Mainnet sits awkwardly next to a pitch about financial
+inclusion. Do not hide it. The honest version:
+
+> "On Mainnet today the economics need a few thousand dollars, because every
+> harvest costs Ethereum gas. That floor drops the moment Attestcoin supports a
+> cheap source chain — which is on *their* roadmap, not ours. The design does not
+> change; one constant does."
+
+That is a better answer than pretending the problem is not there, and it points at
+someone else's roadmap rather than a hole in ours.
 
 ### The score only moves while there is debt
 
@@ -292,7 +304,7 @@ interesting still works and demos fine. Say so openly in the submission.
 
 ## What the demo shows
 
-One chain (Base Sepolia), one asset, one yield source. On screen:
+One chain (Ethereum Sepolia — the only option), one asset, one yield source. On screen:
 
 1. Ada deposits into the Ethereum vault.
 2. The proof lands on Creditcoin — show the actual verification transaction.
@@ -344,15 +356,24 @@ else you showed. A builder who flags it first looks careful.
    fiddly and slow. Our own mock yield contract is fast and controllable but must
    be labelled as a mock. Pick one and be upfront. **This also decides our track
    — see below.**
+
+   **Checked: Aave V3 is live on Ethereum Sepolia** (enable testnet mode on
+   app.aave.com). So the credible option is genuinely available — the only source
+   chain we are allowed to use also has the yield source we want.
+
+   **Gotcha:** the Sepolia pool lists *Aave's own* test USDC and WETH. Circle's
+   Sepolia USDC and the standard WETH9 are **different tokens and will not be
+   accepted.** Get the assets from Aave's faucet, and hardcode those addresses.
 3. **How much can she borrow?** **Decided: the credit-score ladder — 10% at
    score 0, rising to a hard 50% ceiling at score 85.** See "The credit score"
    above. Alchemix's flat ~50% is the ceiling we graduate *toward* rather than
    start at. Still open: do the tiers step (10/20/30/40/50) or slide
    continuously? Steps are easier to show on screen and easier to reason about;
    a slider is smoother but the demo has to explain it. **Recommend steps.**
-4. **Which source chain?** **Decided: Base.** Harvest gas on mainnet forces a
-   ~$4,000 minimum deposit, which contradicts the inclusion story; on Base the
-   floor is ~$100. See "Sizing" above.
+4. **Which source chain?** **Not a decision — Attestcoin supports Ethereum
+   Mainnet and Ethereum Sepolia only.** No L2s, no other L1s. Demo on Sepolia.
+   The gas economics this used to be about are handled by `MIN_HARVEST` instead;
+   see "Sizing" above.
 5. **Who triggers the harvest?** Anyone (permissionless, more decentralised) or
    just us (simpler)? For the demo, just us is fine.
 6. **What if two people deposit?** Does each get their own vault, or one shared
@@ -472,7 +493,7 @@ real data already in it. That's a strong roadmap story.
   score")
 - Any way for the score to go *down*, or any penalty mechanism (nothing can
   default, so there is nothing to penalise)
-- Multiple source chains
+- Multiple source chains (not our choice — Attestcoin supports Ethereum only)
 - Multiple collateral types
 - Shared pooled vaults
 - Liquidations (impossible here by design — that's the point)
@@ -490,7 +511,7 @@ real data already in it. That's a strong roadmap story.
 | **Scale-invariant** | Deposit size cancels out of every timeline. A big deposit gets a big loan *and* big yield, so it repays no faster. |
 | **Yield** | Profit her locked money earns by sitting somewhere useful. |
 | **Harvest** | Actually collecting that profit and moving it into our contract. |
-| **Source chain** | Where the money is (Ethereum/Base/Sepolia). |
+| **Source chain** | Where the money is. Ethereum Mainnet or Sepolia — Attestcoin supports nothing else. |
 | **ASC** | Our contract on Creditcoin that checks proofs. Attestcoin Smart Contract. |
 | **Precompile `0x0FD2`** | Creditcoin's built-in proof checker. Ask it "did this really happen?", get an instant yes/no. |
 | **Merkle proof** | Proves a transaction was inside a particular block. |
