@@ -1,4 +1,10 @@
 {
+  "lib/aave-v4": {
+    "tag": {
+      "name": "v0.5.11",
+      "rev": "cdacec509e4f848bff1a5556f503afa83eee3b79"
+    }
+  },
   "lib/forge-std": {
     "tag": {
       "name": "v1.16.2",
