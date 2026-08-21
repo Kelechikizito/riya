@@ -37,12 +37,11 @@ Say Ada has $1,000 of USDC and wants cash now without selling.
 5. **Each harvest is proven and wipes out debt.** We prove each harvest to
    Creditcoin the same way as step 2. Creditcoin sees "$25 of real yield
    arrived" and knocks $25 off Ada's debt. No payment from Ada.
-6. **Repaying raises her score, which raises her limit.** After $100 is retired
-   her score is 20, so her limit moves to 20% — she may draw more. Keep going and
-   she climbs the ladder to the hard ceiling of 50%. See
-   "The credit score" below.
-7. **Eventually the debt hits zero.** Then Ada owes nothing and her $1,000 is
-   hers again.
+6. **Repaying raises her score, which raises her limit.** After $40 is retired her
+   score is 20 and her limit moves to 20%; after $170 she is at the 50% ceiling.
+   See "The credit score" below.
+7. **Eventually the debt hits zero.** Then Ada owes nothing — she can redraw at
+   her new limit, or walk away with her $1,000.
 
 Ada never repaid a penny. Her savings did it.
 
@@ -110,18 +109,81 @@ Score runs **0–100**. (The brief said "0/10" and also "85–100"; reading both
 
 ### How the score is earned
 
-**Score = 100 × (total dollars ever repaid) ÷ (50% of your collateral), capped at 100.**
+**Score = 100 × (total dollars ever repaid) ÷ `GRADUATION_TARGET`, capped at 100**,
+where `GRADUATION_TARGET` = **20% of your collateral**.
 
-In one sentence: **you must repay about one full-size loan before you are trusted
-with one.** For Ada, 50% of $1,000 is $500, so every $5 of debt retired is one
-point.
+For Ada, 20% of $1,000 is $200, so every $2 of debt retired is one point.
 
 | Ada has repaid | Score | New limit |
 |---|---|---|
 | $0 | 0 | 10% — $100 |
-| $100 | 20 | 20% — $200 |
-| $300 | 60 | 40% — $400 |
-| $425 | 85 | **50% — $500** |
+| $40 | 20 | 20% — $200 |
+| $100 | 50 | 30% — $300 |
+| **$170** | **85** | **50% — $500** |
+
+### Why the graduation target is a constant, and why it is 20%
+
+**This one number decides whether the demo works.** Make it a named constant, not
+a magic number buried in the maths.
+
+The deposit size cannot be used to tune this — the whole system is
+scale-invariant. Loan is `D × LTV`, yield is `D × rate`, so time to repay is
+`LTV / rate` and **`D` cancels out**. Ada's first loan takes 2 years to
+self-repay whether she deposits $100 or $100 million. A minimum deposit does not
+make anything faster.
+
+The graduation target is the lever that does:
+
+| `GRADUATION_TARGET` | Repaid to reach score 85 | Years at 5% yield |
+|---|---|---|
+| 50% of collateral | $425 on $1,000 | 8.5 |
+| **20% (chosen)** | **$170** | **3.4** |
+| 10% | $85 | 1.7 |
+
+At 50% the ladder is a mortgage and nobody in the demo ever graduates. At 20% it
+is a plausible customer journey and the story still holds: *repay a real loan's
+worth before you get a real loan.* Tune this constant for the demo rather than
+faking anything else.
+
+### Sizing: minimum deposit and minimum harvest
+
+Not for speed — for **unit economics**. Each harvest costs gas on the source chain
+to execute and gas on Creditcoin to prove. Below some size the yield being proven
+is worth less than the proof of it.
+
+Creditcoin's side is cheap: `notes.md` gives ≈ `2.3e-5 + 2.9e-7 × hash count` CTC,
+fractions of a cent for a recently-finalised transaction. **The binding cost is
+the harvest transaction on the source chain**, and that is an argument about which
+source chain to use:
+
+| Source chain | Harvest gas | Implied minimum deposit |
+|---|---|---|
+| Ethereum mainnet | a few dollars | ~$4,000 — far too high for a product about inclusion |
+| **Base** | cents | **~$100** |
+
+**Use Base.** The spec already said "Ethereum / Base"; this is the argument for
+picking one. Cheap gas keeps the minimum small, which keeps the inclusion story
+honest.
+
+- **`MIN_DEPOSIT` = $100.** Below this a position cannot generate harvests worth
+  proving.
+- **`MIN_HARVEST` = $1.** Worth more than the deposit floor, because it is the
+  constraint that actually binds: it batches dust into proofs that pay for
+  themselves, and stops anyone spamming the worker with penny harvests.
+
+### The score only moves while there is debt
+
+Harvests cannot retire debt that is not there. **If Ada repays fully and does not
+redraw, her score freezes and she never graduates.**
+
+So "debt hits zero" and "climb the ladder" pull against each other, and the demo
+has to pick. The resolution: **yield arriving with no outstanding debt accrues to
+Ada as a withdrawable balance on Creditcoin**, and redrawing is a deliberate act
+she takes at her new, higher limit.
+
+That is one button in the frontend, it is how revolving credit actually works,
+and it turns the awkward moment into the good one — *she finishes her first loan,
+sees her limit go up, and chooses to use it.*
 
 ### Why it is measured in dollars repaid, not repayments made
 
@@ -230,7 +292,7 @@ interesting still works and demos fine. Say so openly in the submission.
 
 ## What the demo shows
 
-One chain (Sepolia), one asset, one yield source. On screen:
+One chain (Base Sepolia), one asset, one yield source. On screen:
 
 1. Ada deposits into the Ethereum vault.
 2. The proof lands on Creditcoin — show the actual verification transaction.
@@ -238,7 +300,7 @@ One chain (Sepolia), one asset, one yield source. On screen:
 4. Two or three harvests get proven. **The debt visibly drops each time.**
 5. **Her score crosses a tier and the limit jumps.** She draws more, on credit
    she earned during the demo.
-6. Debt hits zero.
+6. Debt hits zero — and she chooses to redraw at her new limit.
 
 Step 4 is the money shot — that's the bit no other chain can do. Step 5 is the
 one the judges will remember, because it is the only moment where a *credit
@@ -249,10 +311,10 @@ rising, and the list of proven harvests that caused both.
 
 ### The honesty problem
 
-Ten years of yield doesn't fit in a three-minute demo, and the score ladder makes
-this **worse**, not better — reaching the top tier needs $425 repaid, which is
-years of real yield. So we speed it up: our own yield source with a silly-high
-rate, or hand-triggered harvests.
+Years of yield don't fit in a three-minute demo. `GRADUATION_TARGET` at 20% cuts
+the ladder from 8.5 years to 3.4, which is honest tuning rather than faking — but
+it is still not three minutes. So we also speed up the clock: our own yield
+source with a silly-high rate, or hand-triggered harvests.
 
 **Say this out loud in the demo.** "We've compressed the timeline; here's the
 real rate." A judge who catches hidden time-compression stops believing anything
@@ -288,9 +350,12 @@ else you showed. A builder who flags it first looks careful.
    start at. Still open: do the tiers step (10/20/30/40/50) or slide
    continuously? Steps are easier to show on screen and easier to reason about;
    a slider is smoother but the demo has to explain it. **Recommend steps.**
-4. **Who triggers the harvest?** Anyone (permissionless, more decentralised) or
+4. **Which source chain?** **Decided: Base.** Harvest gas on mainnet forces a
+   ~$4,000 minimum deposit, which contradicts the inclusion story; on Base the
+   floor is ~$100. See "Sizing" above.
+5. **Who triggers the harvest?** Anyone (permissionless, more decentralised) or
    just us (simpler)? For the demo, just us is fine.
-5. **What if two people deposit?** Does each get their own vault, or one shared
+6. **What if two people deposit?** Does each get their own vault, or one shared
    pool with shares? **Shared pool is a lot more accounting.** For the hackathon,
    one vault per user.
 
@@ -421,6 +486,8 @@ real data already in it. That's a strong roadmap story.
 | **Collateral** | The money Ada locks up to be allowed to borrow. |
 | **Credit score** | 0–100. How much verified repayment Ada has to her name. Decides her borrowing limit. |
 | **LTV / limit** | Loan-to-value. What share of her collateral Ada may borrow — 10% to 50%, set by her score. |
+| **`GRADUATION_TARGET`** | Dollars of repayment needed to reach a perfect score. Set to 20% of collateral. The one constant that decides whether the ladder is demoable. |
+| **Scale-invariant** | Deposit size cancels out of every timeline. A big deposit gets a big loan *and* big yield, so it repays no faster. |
 | **Yield** | Profit her locked money earns by sitting somewhere useful. |
 | **Harvest** | Actually collecting that profit and moving it into our contract. |
 | **Source chain** | Where the money is (Ethereum/Base/Sepolia). |
