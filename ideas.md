@@ -162,13 +162,26 @@ else you showed. A builder who flags it first looks careful.
 
 ## Decisions I still need to make
 
-1. **What does Ada actually borrow?** Simplest is an existing Creditcoin token
-   the loan contract holds. Minting our own dollar-pegged token (like Alchemix's
-   alUSD) means keeping it pegged to $1 — that's a whole second project. **Avoid
-   for the hackathon.**
+1. **What does Ada actually borrow?** **Decided: a mock USD token we deploy on
+   Creditcoin ourselves, clearly labelled as a mock.** See "What already exists on
+   Creditcoin" below for why — the obvious answer (lend an existing token) turns
+   out not to be available.
+
+   Not CTC. If Ada's debt is denominated in a volatile asset while her yield
+   arrives as dollars on Ethereum, then working out how much CTC debt "$25 of
+   yield" clears needs a CTC/USD price — **which drags back in the price oracle
+   this whole design exists to avoid.** No liquidations was supposed to mean no
+   price feed anywhere. A 1:1 USD-denominated token keeps that promise: dollars
+   in, dollars off the debt, no conversion.
+
+   Minting a real synthetic (Alchemix's alUSD route) stays on the roadmap. The
+   peg problem is smaller than it first appears during a hackathon — with no pool
+   listing the token there is no market price to defend — but it only earns its
+   keep once the token needs to be tradeable, which is phase 2.
 2. **Where does the yield come from?** Real Aave on a testnet is credible but
    fiddly and slow. Our own mock yield contract is fast and controllable but must
-   be labelled as a mock. Pick one and be upfront.
+   be labelled as a mock. Pick one and be upfront. **This also decides our track
+   — see below.**
 3. **How much can she borrow?** Alchemix caps around 50%. Start there — it's
    proven, and it's what makes liquidation impossible.
 4. **Who triggers the harvest?** Anyone (permissionless, more decentralised) or
@@ -176,6 +189,88 @@ else you showed. A builder who flags it first looks careful.
 5. **What if two people deposit?** Does each get their own vault, or one shared
    pool with shares? **Shared pool is a lot more accounting.** For the hackathon,
    one vault per user.
+
+---
+
+## What already exists on Creditcoin (checked, Aug 2026)
+
+Worth knowing before writing contracts, because it settles decision 1 and
+confirms decision 2.
+
+| Looked for | Found |
+|---|---|
+| A lending protocol to borrow from | **None.** |
+| DeFi on the chain generally | PenguinSwap (a DEX, live on mainnet). PenguinBase is a dApp hub, Spacecoin is DePIN. |
+| Tracked DeFi TVL | DefiLlama does not list Creditcoin as a chain. Zero of ~8,000 tracked protocols deploy there. |
+| A canonical stablecoin (USDC etc.) | **None.** Not in Circle's deployment list. |
+| Anything lending-shaped in `@gluwa/usc-contracts` v0.2.0 | Nothing. The package is writability messaging plus decode libraries. Its only DeFi-adjacent file, `IPenguinSwapV3Pool.sol`, is used for TWAP price maths to quote relayer fees. |
+
+Credefi appears in Creditcoin's partnership announcements as a lending platform,
+but it is an off-chain EU debt-financing business — not a money market our
+contract can call.
+
+**None of this breaks the design, and one part of it validates the design.**
+
+- We are not borrowing *from* a protocol. Re-read step 3 of the walkthrough: our
+  own loan contract is the lender. There is nothing to integrate with because we
+  are building the thing.
+- The yield — the one part that genuinely needs a mature market — comes from
+  **Ethereum**, not Creditcoin. Decision 2 already pointed that way, and this
+  confirms it: Creditcoin-native yield would have had nowhere to go.
+- The emptiness is a rubric asset. First lending primitive on the chain is a
+  better story than the 380th Aave fork.
+
+**What it does change:** there is no existing token worth denominating the loan
+in, hence decision 1. And there are no depositors on day one, so **we pre-fund
+the loan contract ourselves** — state that openly rather than implying a
+liquidity side that does not exist.
+
+---
+
+## Which track to submit under
+
+**Answer: DeFi.** The track description names the product twice — "Build
+**lending**, trading, liquidity, or **yield** applications on Creditcoin." A
+lending product whose repayment engine is yield is a literal match. The hashtags
+(#Perpetuals #Derivatives #Bridges #Liquid staking) are examples, not a
+whitelist; the prose is the definition.
+
+Why not the others:
+
+| Track | Verdict |
+|---|---|
+| **RWA** | Only if the collateral becomes a tokenized real-world asset. See below — this is a live option, not a no. |
+| **DePIN** | No hardware, no sensors. Nothing to claim. |
+| **Gaming** | That was the PvP idea, set aside. |
+| **AI** | There is no AI here, and bolting one on to qualify is the mistake flagged twice in `ideas-analysis.md`: no judging criterion rewards AI, so it costs Execution Capability and buys nothing. The track's wording ("verified cross-chain data... without centralized oracle operators") is tempting because it describes the **precompile** so well — but that is the substrate we already use, not an AI product. |
+
+### The one honest route to RWA
+
+This is coupled to decision 2 above. Pick Aave or a mock yield source and we are
+DeFi. Pick a **tokenized treasury** as the collateral — Ada deposits a T-bill
+token and real-world treasury yield pays down her loan — and the *same contracts*
+qualify as RWA, on a hackathon whose slogan is "real world."
+
+The catch is practical: that needs a tokenized-treasury token that actually
+exists on our testnet. On Sepolia it probably means mocking it, and a mocked RWA
+is a weaker RWA entry than a real DeFi one. **Worth ten minutes checking what is
+deployed before deciding.**
+
+### Do not chase a thinner track
+
+The instinct to dodge a crowded DeFi field is understandable, but placement
+matters far less than fit — judges score the rubric, not the tag. A submission
+filed under RWA while visibly being a lending protocol reads as gaming the
+taxonomy. A strong DeFi entry beats a strained RWA one.
+
+(Any claim in this repo that RWA or DePIN is "less crowded" is speculation, never
+measured. Do not restructure the build around it.)
+
+### To confirm from the hackathon rules
+
+- Can we enter more than one track?
+- Is the track locked at registration, or chosen at submission? If the latter,
+  this decision can wait until the yield source is settled.
 
 ---
 
@@ -202,7 +297,8 @@ real data already in it. That's a strong roadmap story.
 
 - Returning collateral on Ethereum (needs writability — out of scope for this
   hackathon, per Gluwa's answer in `qanda.md`)
-- Our own stablecoin
+- A *real* pegged stablecoin (we deploy a labelled mock USD token instead —
+  no peg to defend, no backing claimed; see decision 1)
 - Multiple source chains
 - Multiple collateral types
 - Shared pooled vaults
