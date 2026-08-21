@@ -75,6 +75,28 @@ When evaluating or expanding an idea:
   Vision rewards a credible forward path), but never in the demo or the
   submission's critical path.
 
+### Hard constraint: Ethereum is the only source chain
+
+Per the Attestcoin docs and the hackathon specification, the source chain can
+**only** be Ethereum Mainnet or Ethereum Sepolia. There are currently no
+provisions for any other network — no L2s, no alternative L1s — as a source
+chain.
+
+Treat this as fixed, not as something to design around:
+
+- Never propose Base, Arbitrum, Optimism, Polygon, Solana or any other network as
+  the source chain, and do not assume multi-chain aggregation is available. An
+  idea whose value comes from reading *several* chains collapses to reading one.
+- **Sepolia is the demo chain; Mainnet is the production story.** Testnet gas is
+  free, so any argument that depends on source-chain gas costs does not bind
+  during the demo — but state the Mainnet number honestly when discussing
+  production economics.
+- Mainnet gas is therefore a real constraint on any design that needs frequent
+  source-chain transactions. The lever is batching (fewer, larger transactions),
+  never switching to a cheaper chain.
+- Support for more source chains may appear in the *roadmap* as a future phase,
+  the same way writability does — never in the demo or the critical path.
+
 ### Ask, don't assume
 
 When an idea's feasibility against these criteria is genuinely unclear, ask
