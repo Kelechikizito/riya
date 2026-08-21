@@ -29,23 +29,29 @@ Say Ada has $1,000 of USDC and wants cash now without selling.
 2. **We prove the deposit.** Our off-chain bot notices the deposit and asks
    Creditcoin to verify it. Creditcoin checks the maths itself and confirms:
    *yes, that deposit really happened on Ethereum.*
-3. **Ada borrows.** Our contract on Creditcoin lends her $500 — half of what she
-   deposited. She now has spendable money on Creditcoin and a $500 debt.
+3. **Ada borrows — but only a little at first.** She is brand new, so her credit
+   score is **0** and she can borrow **10%** of her deposit: **$100**. She now
+   has spendable money on Creditcoin and a $100 debt.
 4. **The money earns.** Ada's $1,000 sits in Aave making about $50 a year.
    Every so often we "harvest" that profit into our Ethereum contract.
 5. **Each harvest is proven and wipes out debt.** We prove each harvest to
    Creditcoin the same way as step 2. Creditcoin sees "$25 of real yield
    arrived" and knocks $25 off Ada's debt. No payment from Ada.
-6. **Eventually the debt hits zero.** $500 debt ÷ $50 a year ≈ 10 years. Then
-   Ada owes nothing and her $1,000 is hers again.
+6. **Repaying raises her score, which raises her limit.** After $100 is retired
+   her score is 20, so her limit moves to 20% — she may draw more. Keep going and
+   she climbs the ladder to the hard ceiling of 50%. See
+   "The credit score" below.
+7. **Eventually the debt hits zero.** Then Ada owes nothing and her $1,000 is
+   hers again.
 
 Ada never repaid a penny. Her savings did it.
 
 ### Why she can't get liquidated
 
-She borrowed $500 against $1,000. Her debt only ever goes **down** — nothing in
-the system can make it grow. So she can never owe more than she deposited. There
-is no margin call, no liquidation, no one seizing her money.
+She borrowed $100 against $1,000, and she can never borrow more than 50% of it.
+Her debt only ever goes **down** — nothing in the system can make it grow. So she
+can never owe more than she deposited. There is no margin call, no liquidation,
+no one seizing her money.
 
 **This is the single most important property of the whole design.** Everything
 else in this document flows from it (see "Why this idea works on Creditcoin").
@@ -77,6 +83,94 @@ transaction plus two proofs and it answers, in the same transaction, "real" or
 
 **On any other chain this app is impossible without a bridge.** That's the whole
 reason we're on Creditcoin, and it's what the judges are scoring.
+
+---
+
+## The credit score — earning a bigger loan
+
+New borrowers start at **10%** and graduate toward a hard ceiling of **50%** by
+actually repaying. Nobody gets a full-size loan on day one.
+
+This is the **secured credit card** model — small limit, prove yourself, graduate
+— which is about as proven as consumer credit gets, and it puts a *credit
+product* at the centre of a submission judged by a credit company.
+
+### The ladder
+
+Score runs **0–100**. (The brief said "0/10" and also "85–100"; reading both as a
+0–100 scale, starting at 0.)
+
+| Credit score | Max borrowable |
+|---|---|
+| 0–19 | 10% |
+| 20–39 | 20% |
+| 40–59 | 30% |
+| 60–84 | 40% |
+| **85–100** | **50% — the ceiling, never more** |
+
+### How the score is earned
+
+**Score = 100 × (total dollars ever repaid) ÷ (50% of your collateral), capped at 100.**
+
+In one sentence: **you must repay about one full-size loan before you are trusted
+with one.** For Ada, 50% of $1,000 is $500, so every $5 of debt retired is one
+point.
+
+| Ada has repaid | Score | New limit |
+|---|---|---|
+| $0 | 0 | 10% — $100 |
+| $100 | 20 | 20% — $200 |
+| $300 | 60 | 40% — $400 |
+| $425 | 85 | **50% — $500** |
+
+### Why it is measured in dollars repaid, not repayments made
+
+This matters, because the obvious version is broken. **Do not add points per
+harvest.** Harvests may be triggered by anyone, so "one point per repayment"
+means someone calls harvest a thousand times with a cent each and walks up the
+ladder for free. Counting dollars makes the score cost exactly what it claims to
+represent.
+
+Dividing by collateral rather than by the amount borrowed closes the same hole
+from the other side: borrowing $1, repaying $1, and calling that a perfect record
+would otherwise buy the top tier instantly.
+
+### The rule that must not be broken
+
+**The limit is checked when Ada borrows, and never again.**
+
+If her collateral value moves and her existing debt is suddenly above her limit,
+**nothing happens.** We do not call in the loan, we do not demand a top-up, we do
+not seize anything. Enforcing a limit retroactively *is* a liquidation, and that
+would drag back in the price feeds, the keepers, and the outbound-enforcement
+problem that this entire design exists to avoid.
+
+The limit gates new borrowing. That is all it ever does.
+
+### Be honest about what this score is
+
+Ada **cannot default** — that is the point of the product. So the score is not
+measuring credit risk; there is no risk to measure. What it measures is
+**demonstrated repayment volume**: real dollars, verified by proof, retiring real
+debt.
+
+That is worth saying plainly, because it is still genuinely valuable — it is a
+portable, cryptographically-backed repayment record, which is exactly the input
+the cross-chain credit-score idea needed and never had. But pitch it as a
+*graduation ladder built on verified history*, not as risk assessment. A judge
+from a credit company will ask what happens on default, and "nothing can default"
+is a strong answer only if we got there first.
+
+### Where this goes next (roadmap, not hackathon scope)
+
+Ada starts at 0 even if she has repaid loans on Aave and Compound for years —
+because we cannot see them. **But Creditcoin can.** The same precompile that
+proves her harvests can prove her past repayments on Ethereum, letting her import
+an earned starting score instead of beginning at zero.
+
+That merges this build with the portable-credit-score idea, makes the proving
+machinery do double duty, and is the strongest phase-2 story available. It is
+also a whole second subsystem — keep it in the pitch and out of the demo.
 
 ---
 
@@ -140,19 +234,25 @@ One chain (Sepolia), one asset, one yield source. On screen:
 
 1. Ada deposits into the Ethereum vault.
 2. The proof lands on Creditcoin — show the actual verification transaction.
-3. Ada's loan appears on Creditcoin. She has money.
+3. Ada's loan appears on Creditcoin. Score 0, limit 10%, small loan.
 4. Two or three harvests get proven. **The debt visibly drops each time.**
-5. Debt hits zero.
+5. **Her score crosses a tier and the limit jumps.** She draws more, on credit
+   she earned during the demo.
+6. Debt hits zero.
 
-Step 4 is the money shot. That's the bit no other chain can do.
+Step 4 is the money shot — that's the bit no other chain can do. Step 5 is the
+one the judges will remember, because it is the only moment where a *credit
+score* visibly moves on a *credit chain*.
 
-Frontend goes in the existing `frontend/` app: her debt falling, next to the list
-of proven harvests that caused it.
+Frontend goes in the existing `frontend/` app: her debt falling, the score dial
+rising, and the list of proven harvests that caused both.
 
 ### The honesty problem
 
-Ten years of yield doesn't fit in a three-minute demo. So we speed it up — our
-own yield source with a silly-high rate, or hand-triggered harvests.
+Ten years of yield doesn't fit in a three-minute demo, and the score ladder makes
+this **worse**, not better — reaching the top tier needs $425 repaid, which is
+years of real yield. So we speed it up: our own yield source with a silly-high
+rate, or hand-triggered harvests.
 
 **Say this out loud in the demo.** "We've compressed the timeline; here's the
 real rate." A judge who catches hidden time-compression stops believing anything
@@ -182,8 +282,12 @@ else you showed. A builder who flags it first looks careful.
    fiddly and slow. Our own mock yield contract is fast and controllable but must
    be labelled as a mock. Pick one and be upfront. **This also decides our track
    — see below.**
-3. **How much can she borrow?** Alchemix caps around 50%. Start there — it's
-   proven, and it's what makes liquidation impossible.
+3. **How much can she borrow?** **Decided: the credit-score ladder — 10% at
+   score 0, rising to a hard 50% ceiling at score 85.** See "The credit score"
+   above. Alchemix's flat ~50% is the ceiling we graduate *toward* rather than
+   start at. Still open: do the tiers step (10/20/30/40/50) or slide
+   continuously? Steps are easier to show on screen and easier to reason about;
+   a slider is smoother but the demo has to explain it. **Recommend steps.**
 4. **Who triggers the harvest?** Anyone (permissionless, more decentralised) or
    just us (simpler)? For the demo, just us is fine.
 5. **What if two people deposit?** Does each get their own vault, or one shared
@@ -299,6 +403,10 @@ real data already in it. That's a strong roadmap story.
   hackathon, per Gluwa's answer in `qanda.md`)
 - A *real* pegged stablecoin (we deploy a labelled mock USD token instead —
   no peg to defend, no backing claimed; see decision 1)
+- Importing credit history from other chains (the phase-2 story — see "The credit
+  score")
+- Any way for the score to go *down*, or any penalty mechanism (nothing can
+  default, so there is nothing to penalise)
 - Multiple source chains
 - Multiple collateral types
 - Shared pooled vaults
@@ -311,6 +419,8 @@ real data already in it. That's a strong roadmap story.
 | Term | Plain meaning |
 |---|---|
 | **Collateral** | The money Ada locks up to be allowed to borrow. |
+| **Credit score** | 0–100. How much verified repayment Ada has to her name. Decides her borrowing limit. |
+| **LTV / limit** | Loan-to-value. What share of her collateral Ada may borrow — 10% to 50%, set by her score. |
 | **Yield** | Profit her locked money earns by sitting somewhere useful. |
 | **Harvest** | Actually collecting that profit and moving it into our contract. |
 | **Source chain** | Where the money is (Ethereum/Base/Sepolia). |
