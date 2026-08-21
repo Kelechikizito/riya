@@ -1214,3 +1214,337 @@ If you can only build one: build the self-repaying loan if you want the safest e
 build the escrow if you want the strongest story and the widest user surface. **Build the
 escrow if the team is confident on the frontend**, because its demo is the only one in
 this file that a non-crypto judge feels immediately.
+
+---
+
+# Idea Analysis — PvP Token Wagering with a Global Leaderboard for Financial Inclusion
+
+Vetted against the five Creditcoin hackathon criteria in `CLAUDE.md`, plus the
+readability-only hard constraint.
+
+**Verdict: the strongest raw material in this file, attached to the weakest stated
+design.** This is the first idea vetted that passes the writability constraint *by
+construction* rather than by salvage, and the first that is genuinely Strong on User
+Base Expansion. It is also the first with **no cross-chain component at all** — as
+stated it would ship unchanged on any L2, which `CLAUDE.md` names as the red flag.
+Its stated purpose (financial inclusion) is also in direct tension with its stated
+mechanism (players earn tokens off each other), in front of the one judging panel most
+likely to notice.
+
+The fix is not a patch. It is choosing the genre — the thing the one-liner explicitly
+leaves open — using the constraints rather than taste. Do that and the genre choice
+falls out uniquely, and it happens to be the one where readability is the settlement
+engine rather than decoration.
+
+---
+
+## First, the good news — this is not a small thing
+
+Every previous idea in this file lost something real to the writability ban. Self-repaying
+loans lose collateral release. Escrow loses release-on-source-chain. The ETF loses
+redemption, which *is* the ETF. Each salvage was an argument for why the truncated half
+still stands.
+
+A game economy needs no such argument. Tokens won are useful **inside the game**, on
+Creditcoin, forever. Rank is a Creditcoin-native record. `CLAUDE.md` asks for designs
+"where the destination state living on Creditcoin is the point, not a waypoint" — a
+closed game economy is the purest example of that in the whole file. **Nothing here
+wants to leave.**
+
+Second: games acquire users, and infrastructure does not. Five of the six prior ideas
+score Weak or Mixed on User Base Expansion, which `CLAUDE.md` flags as the shortlist's
+standing weakness. This is the only concept vetted that could plausibly have **real
+players, in real numbers, during the judging period** — that is a demo other submissions
+structurally cannot produce.
+
+Hold on to both of these. They survive everything below.
+
+---
+
+## Blocking issues
+
+### 1. As stated, there is no Creditcoin in it
+
+Players wager tokens against each other; a contract escrows stakes, resolves a winner,
+updates a leaderboard. Every line of that runs on Base, Arbitrum, Monad, or a Postgres
+table. The Block Prover Precompile appears nowhere. Attestcoin appears nowhere. The
+answer to "could this ship on any L2 unchanged?" is *yes, trivially, and cheaper*.
+
+This is the single most damaging thing you can hand a Creditcoin panel, because
+**Technical Alignment is the load-bearing criterion** and the failure is not partial —
+it is total. It also cannot be repaired by bolting proving on afterwards. A deposit
+bridged in from Ethereum, or an NFT checked at signup, is decoration: remove it and the
+game is unchanged. The test for load-bearing is exact — *delete readability and see
+whether the product still exists.* Right now nothing breaks, because nothing was
+connected.
+
+### 2. "Players earn tokens off each other" is not financial inclusion — it is the opposite
+
+Be precise about the arithmetic. A PvP wagering economy is zero-sum before costs and
+**negative-sum after rake and gas**. Aggregate player wealth strictly decreases. Skill
+concentrates winnings toward the top decile, so the median participant loses, slowly,
+by design. That is the mechanism working correctly, not a failure mode.
+
+You can market a negative-sum game as entertainment. You cannot market it as inclusion.
+And the gap matters more here than anywhere else you could pitch it: Creditcoin's
+real-world positioning has centred on extending credit to underserved borrowers in
+emerging markets. The panel is Creditcoin and Credit Labs. A submission that says "we
+drive financial inclusion" over a mechanism that transfers money from inexperienced
+players to skilled ones is not merely unpersuasive to that specific room — it risks
+reading as tone-deaf about their actual mission.
+
+Two honest exits:
+
+- **Drop the inclusion claim.** Pitch entertainment and user acquisition. Loses the
+  narrative, keeps integrity, still scores on User Base Expansion.
+- **Change what is being earned** so the claim becomes true. Make the durable output a
+  *verifiable track record* — a credential the player keeps and can monetise — rather
+  than the opponent's money. See the salvage; this is the better exit by a distance,
+  and it is the one that also fixes issue 1.
+
+Do not keep the claim over the current mechanism. It is the kind of thing a judge
+challenges in Q&A, and there is no good answer.
+
+### 3. "I'm not sure which" is not a gap in the pitch — it *is* the design
+
+The genre is the whole engineering problem, and it is not a matter of preference.
+Four hard constraints eliminate almost every candidate:
+
+| Constraint | Where it comes from | What it kills |
+|---|---|---|
+| **Async, minutes-scale resolution** | Attestcoin sits deliberately behind the source chain head to survive re-orgs (`qanda.md`). Nothing cross-chain resolves in seconds. | Every real-time or action game |
+| **No hidden information, or accept commit–reveal** | On-chain moves are public in the mempool before they land | Poker, fog-of-war, simultaneous-move games without a reveal round |
+| **Outcome verifiable on-chain without a referee** | A trusted resolver reintroduces the oracle you are meant to be replacing | Anything needing subjective judgement |
+| **Self-matching must not pay** | See issue 4 | Any game rewarding raw wins or volume |
+
+Two more kill the skill-game family specifically. **Cheating detection is unsolvable in
+the window**: a chess-like game is trivially beaten by a player running Stockfish in
+another tab, and every real platform answers this with behavioural anti-cheat systems
+built over years. And **on-chain randomness is a project of its own** — no assumption of
+a native VRF on Creditcoin should be made without checking; block-hash randomness is
+exploitable by exactly the sophisticated players who will show up for money.
+
+Run every candidate genre through the table and one family survives: **wagering on
+outcomes that are already verifiable facts on another chain.** That is not a compromise
+choice. It is the only genre where the constraints are features — async is fine because
+outcomes take hours, hidden information does not exist because the world resolves it,
+and the referee is a precompile.
+
+### 4. A rewarded global leaderboard is a Sybil farm unless the ranking is designed against it
+
+This is the failure mode that kills the product after launch rather than at judging, so
+it is worth stating sharply. If the leaderboard pays — tokens, an airdrop, prestige with
+future value — then the cheapest strategy is not to play well. It is to run both sides.
+Open two wallets, lose deliberately from one to the other, and manufacture an unbroken
+win record for the cost of rake and gas. Rank becomes purchasable at a fixed, low price.
+
+Ranking by wins, volume, or streak is unsalvageable against this. What works:
+
+- **Rank on realized profit against distinct counterparties**, discounting repeated
+  pairings, so beating your own alt earns nothing.
+- **Rating systems** (Elo/Glicko), where beating a low-rated account you created yourself
+  transfers almost no rating.
+- **Raise the cost of an identity.** This is where cross-chain history stops being
+  decoration and becomes anti-Sybil: requiring proof of a costly prior action on
+  Ethereum mainnet makes the tenth wallet expensive rather than free.
+
+Note the shape of that third item — it is the first place where readability does real
+work that no substitute provides cheaply. Keep it, but as reinforcement; the mechanism
+in the salvage is the primary answer.
+
+### 5. Wagering has a regulatory surface, and the framing determines its size
+
+Staking value on an uncertain outcome is regulated as gambling in many jurisdictions.
+The recognised carve-outs are skill-based competition (Skillz, fantasy sports) and, more
+loosely, event/prediction markets — a category whose regulatory perimeter is contested
+and actively litigated, not settled.
+
+This is not a reason to abandon the idea, and a hackathon submission does not need a
+licence. It *is* a reason to (a) not put "gambling" adjacent to "financial inclusion for
+the unbanked" in the same sentence of the pitch, and (b) have a one-line answer ready.
+The best available answer is that a peer-to-peer venue taking a rake never takes the
+other side of a bet — the proven Betfair exchange model, not the sportsbook model.
+
+---
+
+## Scoring against the rubric
+
+Rated **as stated**. The salvage changes three of these rows.
+
+| Criterion | Rating | Reasoning |
+|---|---|---|
+| **User Base Expansion** | ✅ Strong | The best in this file, and the criterion `CLAUDE.md` calls the shortlist's standing weakness. Games acquire users; DeFi infrastructure acquires integrators. It is the only idea vetted that could show real player counts at submission. |
+| **Proven Models** | ✅ Strong | Deeply proven: rake-taking peer-to-peer venues (Betfair, poker), skill-gaming platforms (Skillz), competitive ladders (Elo/chess.com), prediction markets (Polymarket). Caveat: play-to-earn is equally proven *as a failure* — judges will read Axie and StepN into any token-reward loop, so the token must not be the reason to play. |
+| **Product Vision** | ⚠️ Mixed | Legible and demoable, but the stated purpose contradicts the stated mechanism (issue 2), and the central design decision is explicitly unmade (issue 3). "I'm not sure which" in the pitch reads as unfocused. |
+| **Technical Alignment** | ❌ Absent as stated | Not weak — absent. No proof, no precompile, no cross-chain data. The clearest "ships on any L2 unchanged" case in the file. |
+| **Execution Capability** | ⚠️ Depends entirely on genre | A game client, matchmaking, anti-cheat, randomness, *and* an ASC is a two-team build and will not finish. A wagering venue with no game engine is a narrow vertical slice and will. Same idea, opposite verdicts. |
+
+The row set is the mirror image of the SDK analysis: that idea had impeccable Technical
+Alignment and no users; this one has the users and, as written, no reason to be on
+Creditcoin.
+
+---
+
+## The salvage: let the other chain be the game
+
+Stop building a game whose outcomes you must referee. Wager on outcomes **another chain
+has already decided**, and make the precompile the referee.
+
+> **Verified-outcome duels.** Two players take opposite sides of a claim about a
+> source-chain event — *will this Aave position be liquidated before block N?*, *will
+> this borrower's repayment land before the deadline?*, *which of these two pools sees
+> the larger inflow today?* Both stake CTC on Creditcoin. When the window closes, either
+> player (or a worker) submits the deciding source-chain transaction with its Merkle and
+> continuity proofs to the ASC. The precompile verifies inclusion and finality
+> synchronously, the ASC decodes the event, checks `status`, pays the winner, and updates
+> the ladder. The house takes a rake and never takes a side.
+
+Why each blocking issue dissolves:
+
+- **Issue 1 — Technical Alignment becomes unfakeable.** Delete readability and there is
+  no settlement, therefore no product. On any other L2 this needs UMA, a Chainlink feed,
+  or a trusted resolver — an oracle with a dispute window, a bond, and a delay. Here the
+  chain resolves it natively, in one transaction, with no counterparty. That is the
+  second-sharpest demonstration of the precompile in this whole file, after the atomic
+  liquidation guard in `ideas.md` — and unlike that one, it is visually compelling.
+- **Issue 2 — inclusion becomes true instead of asserted.** The durable output is not the
+  opponent's money; it is a **public, verifiable record of judgement about credit
+  events**. Someone with no capital, no collateral, and no banking history can accumulate
+  a provable track record of correctly assessing who repays. That is a credential the
+  underserved genuinely cannot obtain today, and it is exactly Creditcoin's thesis
+  arriving through the front door of a game.
+- **Issue 3 — the genre is now determined, not chosen.** Async: outcomes take hours or
+  days, so attestation lag is irrelevant. No hidden information: the world holds it. No
+  randomness: the source chain is the entropy. No anti-cheat: there is nothing to cheat,
+  since neither player can influence what a stranger's wallet does on Ethereum. Every
+  constraint from the table is satisfied by construction rather than by engineering.
+- **Issue 4 — self-matching stops paying.** Both sides of a duel are held by you, so you
+  win one and lose one and pay rake on both. Combined with rating-based ranking and
+  distinct-counterparty discounting, wash-playing is a strictly losing strategy rather
+  than a cheap one.
+- **Issue 5 — the framing improves.** A peer-to-peer venue on verifiable public events,
+  taking a rake, is the most defensible position available in this category.
+- **Execution collapses to something buildable.** There is no game engine. The client is
+  a form: pick an event, pick a side, stake, wait. The build is the ASC, a settlement
+  contract, a worker, and a leaderboard — the same four components `notes.md` describes,
+  and no more.
+
+And it plugs directly into the file's running thesis rather than sitting beside it. If
+the events wagered on are **repayment and liquidation events**, the leaderboard is a
+ranked list of people who are demonstrably good at judging creditworthiness. The
+roadmap writes itself, and it is a real one: *Phase 1, the game produces a ranked pool
+of proven forecasters. Phase 2, their aggregate positions become a signal — a
+prediction-market price for "will this borrower repay" is an underwriting input, and it
+is generated by people with no credentials and verified by cryptography rather than by
+a bureau.* That is a credible Product Vision arc, and it is the same substrate as Idea 1
+in `ideas.md`, approached from the demand side instead of the supply side.
+
+### The one thing to watch
+
+The salvage needs **enough resolvable events with real disagreement** to sustain a match
+queue. Too few and the venue is empty; too obvious and nobody takes the other side.
+Before committing, enumerate a concrete week's worth of candidate events on Sepolia or
+mainnet and check that a reasonable person could disagree about each. This is the
+feasibility question that decides the idea, and it is answerable in an afternoon.
+
+### Runner-up, if the duel framing is rejected
+
+**Cross-chain-history-gated tournaments** — entry requires proving a costly prior action
+on another chain. Weaker: readability is a gate, not the mechanism, so it is decoration
+under the issue-1 test, and it inherits every anti-cheat problem the duel avoids. One
+technical correction worth carrying regardless: **Attestcoin proves transactions and
+their logs, not present state** (`notes.md`, `qanda.md`). You can prove a wallet *received*
+an NFT in some transaction; you cannot prove it *still holds* it. Any gate phrased as
+"players who own X" is unbuildable as phrased and must be rewritten as "players who
+performed X."
+
+---
+
+## What the demo shows at submission
+
+Concretely, because Execution Capability is judged on credibility:
+
+1. Two wallets open a duel on a real Sepolia event with a live block deadline.
+2. Both stake; the escrow and the claim are visible on Creditcoin.
+3. The event happens (or the deadline passes).
+4. The worker fetches proofs; the ASC verifies through `0x0FD2` **in one transaction**;
+   the winner is paid; the ladder moves.
+5. The judge is shown that step 4 consulted no oracle, no multisig, no resolver, and no
+   dispute window — and that on any other chain, it would have needed all four.
+
+Step 5 is the submission. Everything else is scaffolding for it.
+
+---
+
+## Deliberate questions
+
+1. **Is the inclusion claim load-bearing in your pitch, or decorative?** If load-bearing,
+   the salvage is mandatory — the stated mechanism cannot support it. If decorative, drop
+   it and pitch entertainment plus user growth, which still scores.
+2. **What class of event do players wager on?** Credit events (repayments, liquidations)
+   put you on the judges' thesis. Generic on-chain trivia does not. This choice is worth
+   more rubric points than any implementation decision downstream of it.
+3. **Where does liquidity come from with ten users?** Peer-to-peer venues have a
+   cold-start problem: no counterparty, no match. Do you seed the other side yourself for
+   the demo (honest, and say so), or use a pooled/parimutuel structure where players bet
+   against a pool rather than a named opponent? Parimutuel solves cold-start and weakens
+   the "duel" framing. Decide before building the matcher.
+4. **What does the leaderboard rank on, exactly?** Wins is Sybil-farmable, profit is
+   capital-weighted and favours whoever is richest, rating is neither but is harder to
+   explain on a slide. Recommendation: rating for rank, profit shown alongside.
+5. **What happens when nobody submits a proof?** A losing player has no incentive to
+   settle their own loss. Either the winner submits (needs gas, and they must be able to
+   afford it) or you run the worker (a liveness dependency you own). Also specify the
+   deadline-with-no-event case — the one condition needing no proof at all, and therefore
+   the cheap safety valve.
+6. **Who are the first hundred players?** This is your strongest criterion, so answer it
+   specifically. Crypto-Twitter degens who already trade liquidation calls? DeFi risk
+   people who would enjoy being scored? Existing Creditcoin holders? Each implies a
+   different first event type and a different distribution channel.
+
+---
+
+## Comparison to the shortlist
+
+Updated ranking across all seven ideas vetted in this file:
+
+| Rank | Idea | Blocker as stated |
+|---|---|---|
+| **1** | **Self-repaying loans** | Collateral release only — the last step, not the loop |
+| **2** | **Verified-outcome duels (this idea, salvaged)** | Needs a supply of genuinely contestable events |
+| 3 | Cross-chain escrow | Release is on the wrong chain — fixed by one inversion |
+| 4 | Idea 1, cross-chain credit score (`ideas.md`) | Writability leg; read-only half stands alone |
+| 5 | Cross-chain ETF | Redemption *is* the mechanism |
+| 6 | Agentic settlement SDK | Zero users at submission; competes with `@gluwa/usc-sdk` |
+| 7 | Yield optimizer | Blocked loop **and** possibly no venues |
+| — | RWA micro-payment infra | Payment rail needs both directions |
+| — | **PvP wagering as literally stated** | No cross-chain component whatsoever |
+
+The two-row treatment is deliberate and is the finding: **the gap between the stated
+version and the salvaged version is larger here than for any other idea in this file.**
+As stated it is last, below the ideas that at least fail interestingly. Salvaged it is
+second, and it is second only because it carries a market-formation risk (question 3)
+that the self-repaying loan does not.
+
+It also extends the convergence every prior analysis has landed on — prove performance
+inbound, keep the credit-relevant record natively on Creditcoin — with a new subject:
+
+| Idea | Subject of the credit record |
+|---|---|
+| Idea 1 (`ideas.md`) | Retail wallets |
+| RWA yield distribution | Institutional issuers |
+| Agentic settlement | Autonomous agents |
+| Self-repaying loans | Borrowers (as a byproduct of repaying) |
+| Escrow | Counterparties (as a byproduct of trading) |
+| **Verified-outcome duels** | **Underwriters (as a byproduct of competing)** |
+
+Every other idea in this file records the behaviour of people **who already have capital
+to deploy or debt to service**. This is the only one that produces a credit-relevant
+credential for someone who has **neither** — whose only asset is judgement. Whether or
+not you build it, that is the sharpest financial-inclusion sentence available anywhere in
+this document, and it is only reachable through the salvage.
+
+**Recommendation:** build the self-repaying loan if you want the safest execution. Build
+this if you want the highest ceiling — it is the only concept vetted that can be
+simultaneously Strong on User Base Expansion and Strong on Technical Alignment, which no
+other idea in this file manages. Do not build it as stated.
