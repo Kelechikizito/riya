@@ -6,7 +6,7 @@ remappings = [
     "@gluwa/usc-contracts/=node_modules/@gluwa/usc-contracts/",
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts",
     "foundry-devops/=lib/foundry-devops/",
-    "aave-v4/=lib/aave-v4/"
+    "@aave-v4/=lib/aave-v4/src/",
 ]
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
