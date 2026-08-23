@@ -1,38 +1,224 @@
-# Implementing the Alchemix borrows
+# riya — Build Plan
 
-Build order for §3 of `alchemix.md`. Each step is independently shippable.
+How riya is put together, in build order. Written to be readable cold.
 
-Snippets omit section banners (`headers`), NatSpec, and imports. Errors follow
-the house style: `if/revert`, `Contract__Error`.
+---
 
-**Governing constraint: the source chain holds value and emits facts. It decides
-nothing.** Every rule — collateral accounting, the fee, LTV, the score, debt — is
-Creditcoin state. Ethereum runs two contracts with no policy in either: an escrow
-that forwards deposits, and an adapter that talks to Aave. If a change would put
-a business decision on Ethereum, it is the wrong change.
+## The one-sentence version
 
-Three things follow, and they shape steps 1–4:
+**Users park USDC on Ethereum where it earns Aave yield. That yield is *proven*
+onto Creditcoin, where it quietly pays down a loan they took out against it.**
 
-- **Cheaper.** Mainnet gas is the binding constraint (`CLAUDE.md`), and every
-  parameter on Ethereum is a storage write nobody needs.
-- **Safer.** State that exists once cannot desync. Deleting the Ethereum share
-  table removes the mirror-drift bug class instead of guarding it.
-- **Better aligned.** "Could this ship on any L2 unchanged?" is the red flag to
-  avoid. A generic ERC-4626 vault answers yes; an escrow whose accounting only
-  exists on Creditcoin answers no.
+Deposit on Ethereum. Borrow on Creditcoin. The loan repays itself.
 
-| # | Step | Effort | §  |
+---
+
+## The rule that shapes everything
+
+> **Ethereum holds the money and states facts. Creditcoin decides what they mean.**
+
+Every *decision* — how much collateral you have, your credit score, how much you
+may borrow, the protocol fee — is Creditcoin state. Ethereum runs two small
+contracts with no policy in either.
+
+Why this matters three ways:
+
+| | |
+|---|---|
+| **Cheaper** | Ethereum mainnet gas is expensive. Every rule stored there is a cost with no benefit. |
+| **Safer** | State that exists in one place cannot fall out of sync with a copy. |
+| **Aligned** | "Could this ship on any L2 unchanged?" is the hackathon red flag. A generic vault answers *yes*. An escrow whose accounting only exists on Creditcoin answers *no*. |
+
+---
+
+## System shape
+
+```mermaid
+flowchart LR
+    subgraph ETH["🟦 Ethereum — holds value, states facts"]
+        direction TB
+        U["User<br/>deposits USDC"] --> E["RiyaEscrow<br/><i>custody only</i>"]
+        E --> A["AaveV4Adapter<br/><i>strategy</i>"]
+        A --> AAVE[("Aave V4<br/>Spoke")]
+        AAVE -.->|yield| A
+        A -.->|"gross yield"| E
+    end
+
+    subgraph CC["🟨 Creditcoin — decides what it means"]
+        direction TB
+        ASC["RiyaASC<br/><i>verify + dispatch</i>"] --> L["LoanLedger<br/><i>collateral · fee · debt<br/>LTV · score</i>"]
+        L --> B["User borrows<br/>on Creditcoin"]
+    end
+
+    E -.->|"Deposited event"| W(("watcher<br/>bot"))
+    A -.->|"Harvested event"| W
+    W ==>|"proof"| ASC
+
+    style ETH fill:#eef4ff,stroke:#5b7cc4
+    style CC fill:#fff8e6,stroke:#c9a227
+    style W fill:#f0f0f0,stroke:#888
+```
+
+**Reading it:** the left box never learns Creditcoin exists. The right box never
+touches real money. The only thing crossing the gap is a *proof* — cryptographic
+evidence that a specific Ethereum transaction really happened.
+
+---
+
+## The two contracts on Ethereum
+
+Deliberately boring. That is the point.
+
+| Contract | Job | Emits |
+|---|---|---|
+| **`RiyaEscrow`** (~40 LoC) | Take USDC, hand it to the adapter. Hold harvested yield as reserve. | `Deposited(user, assets)` |
+| **`AaveV4Adapter`** (built ✅) | Supply to Aave, track principal vs yield, pull yield out. | `Harvested(caller, assets)` |
+
+No shares. No withdraw. No fee. No owner. No admin key.
+
+---
+
+## How a deposit becomes credit
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant E as RiyaEscrow<br/>(Ethereum)
+    participant A as AaveV4Adapter
+    participant W as Watcher bot
+    participant P as Block Prover<br/>Precompile 0x0FD2
+    participant ASC as RiyaASC<br/>(Creditcoin)
+    participant L as LoanLedger
+
+    U->>E: deposit(1000 USDC)
+    E->>A: forward to Aave
+    E-->>W: emit Deposited(user, 1000)
+    W->>ASC: submit(proof of that tx)
+    ASC->>P: verify this really happened
+    P-->>ASC: ✅ valid
+    ASC->>ASC: not replayed? tx succeeded?<br/>emitted by the real escrow?
+    ASC->>L: onDeposit(user, 1000)
+    L->>L: collateral += 1000
+    U->>L: borrow(100)
+    Note over L: 10% LTV at score 0.<br/>Checked here and nowhere else.
+```
+
+The three checks in the highlighted step carry the entire security model — not
+replayed, transaction succeeded, emitted by the real escrow. Drop any one and the
+protocol is exploitable.
+
+---
+
+## How the loan repays itself
+
+This is the demo moment: **one Ethereum transaction, one proof, every borrower's
+debt falls at once.**
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor K as Anyone
+    participant A as AaveV4Adapter<br/>(Ethereum)
+    participant E as RiyaEscrow
+    participant W as Watcher bot
+    participant ASC as RiyaASC<br/>(Creditcoin)
+    participant L as LoanLedger
+
+    K->>A: harvest()
+    A->>A: yield = aaveBalance − principal
+    A->>E: transfer gross yield 💵
+    A-->>W: emit Harvested(caller, gross)
+    Note right of A: money moves BEFORE the event.<br/>A successful tx means it really arrived.
+    W->>ASC: submit(proof)
+    ASC->>L: onHarvest(gross)
+    L->>L: fee = 15% → s_protocolFees
+    L->>L: yieldPerShare += 85% ÷ totalCollateral
+    Note over L: Alice's debt ↓<br/>Bob's debt ↓<br/>…all of them, one proof.
+```
+
+**Why the ordering matters.** The yield is transferred *before* the event fires.
+So if the transaction succeeded, the money definitely moved. The proof and the
+value travel together — you cannot prove a payment that did not happen.
+
+---
+
+## Where every rule lives
+
+```mermaid
+flowchart TB
+    subgraph E2["Ethereum — mechanics only"]
+        M1["principal vs yield split"]
+        M2["minimum deposit"]
+        M3["minimum harvest<br/><i>anti-dust</i>"]
+    end
+    subgraph C2["Creditcoin — every decision"]
+        D1["collateral accounting"]
+        D2["15% protocol fee"]
+        D3["credit score"]
+        D4["LTV ladder 10% → 50%"]
+        D5["debt + repayment"]
+    end
+    E2 -.->|"proofs only"| C2
+    style E2 fill:#eef4ff,stroke:#5b7cc4
+    style C2 fill:#fff8e6,stroke:#c9a227
+```
+
+The credit score is the heart of it. Yield that pays your debt raises your score;
+paying cash does not. Higher score, higher borrowing limit:
+
+| Score | Max LTV |
+|---|---|
+| 0–19 | 10% |
+| 20–39 | 20% |
+| 40–59 | 30% |
+| 60–84 | 40% |
+| 85+ | 50% |
+
+You earn trust by *letting the yield work*, not by moving money around.
+
+---
+
+## Build order
+
+```mermaid
+flowchart LR
+    S0["0 ✅<br/>Fix build"] --> S1["1<br/>RiyaEscrow<br/>~40 LoC"]
+    S1 --> S3["3<br/>LoanLedger<br/>~160 LoC"]
+    S3 --> S4["4<br/>RiyaASC<br/>~90 LoC"]
+    S4 --> DEMO{{"🎬 Demo works<br/>end to end"}}
+    S3 -.-> S5["5 · repay"]
+    S3 -.-> S6["6 · self-repay view"]
+    DEMO -.-> S7["7 · Position NFT"]
+    DEMO -.-> S8["8 · IYieldAdapter"]
+    style S0 fill:#d8ecd8,stroke:#4a8a4a
+    style DEMO fill:#ffe9b3,stroke:#c9a227
+    style S7 stroke-dasharray: 4 4
+    style S8 stroke-dasharray: 4 4
+```
+
+**Steps 1 → 3 → 4 are the critical path.** Everything else is optional polish.
+Ship the vertical slice first.
+
+| # | Step | Chain | Effort |
 |---|---|---|---|
-| 0 | Fix the build | done | — |
-| — | Where `AaveV4Adapter` fits | read first | — |
-| 1 | `RiyaEscrow` — custody only | ~40 LoC | 3.1 |
-| 2 | Performance fee (Creditcoin-side) | 0 LoC on Ethereum | 3.2 |
-| 3 | `LoanLedger` — collateral, fee, pro-rata yield | ~160 LoC | 3.1 |
-| 4 | `RiyaASC` — decode, guard, dispatch | ~90 LoC | — |
-| 5 | Manual repayment (score-neutral) | ~10 LoC | 3.4 |
-| 6 | Self-repay rate view | ~8 LoC | 3.3 |
-| 7 | Position NFT | ~40 LoC | 3.5 |
-| 8 | `IYieldAdapter` seam | ~20 LoC | 3.6 |
+| 0 | Fix the build ✅ | — | done |
+| 1 | `RiyaEscrow` — custody only | Ethereum | ~40 LoC |
+| 2 | Performance fee | Creditcoin | 0 LoC on Ethereum |
+| 3 | `LoanLedger` — collateral, fee, yield, score | Creditcoin | ~160 LoC |
+| 4 | `RiyaASC` — verify, guard, dispatch | Creditcoin | ~90 LoC |
+| 5 | Manual repayment, score-neutral | Creditcoin | ~10 LoC |
+| 6 | Self-repay rate view | Creditcoin | ~8 LoC |
+| 7 | Position NFT | Creditcoin | ~40 LoC |
+| 8 | `IYieldAdapter` seam | Ethereum | ~20 LoC |
+
+---
+
+# Implementation
+
+Code sketches per step. Snippets omit section banners (`headers`), NatSpec,
+and imports. Errors follow the house style: `if/revert`, `Contract__Error`.
+Each step maps back to a section of `alchemix.md`, the Alchemix v3 research notes.
 
 ---
 
@@ -503,19 +689,55 @@ adapter's `onlyVault` side and for scripts.
 
 ---
 
-## Demo sequence this enables
+## Hard constraints
 
-1. Two wallets deposit into `RiyaEscrow` → two `Deposited` events → one proof
-   each → collateral credited on Creditcoin.
-2. Both borrow at 10%.
-3. `AaveV4Adapter.harvest()` → **one** transaction, **one** proof → both debts
-   fall pro-rata. *This is the shot: one proof, N borrowers.*
-4. Wallet A calls `repay()` → debt clears, score does not move. Shows the two
-   paths are different on purpose.
-5. Another harvest crosses wallet B's tier → limit jumps → B redraws.
+Two rules from the hackathon spec that are **fixed**, not obstacles to design
+around:
 
-Step 3 is the argument for §3.1 and the only frame in which the mainnet
-economics work.
+```mermaid
+flowchart LR
+    ETH2["Ethereum<br/>Sepolia / Mainnet"] ==>|"✅ readability<br/>prove inbound"| CC2["Creditcoin"]
+    CC2 -.->|"❌ writability<br/>not released"| ETH2
+    style ETH2 fill:#eef4ff,stroke:#5b7cc4
+    style CC2 fill:#fff8e6,stroke:#c9a227
+```
+
+**1 · Readability only.** riya can prove Ethereum events *onto* Creditcoin. It
+cannot send anything back. This is why the loan lives on Creditcoin and stays
+there — never leaving is a *feature*, not a truncation. It is also why v1 has no
+withdrawals: releasing collateral on Ethereum would need the outbound leg.
+
+**2 · Ethereum is the only source chain.** No L2s, no other L1s. Sepolia for the
+demo, Mainnet for the production story.
+
+Both may appear in the **roadmap** as future phases. Neither may appear in the
+demo.
+
+---
+
+## Why judges should care
+
+| Criterion | How riya answers |
+|---|---|
+| **Technical Alignment** | The Block Prover Precompile is load-bearing, not decorative. Delete it and there is no product — the loan cannot know the yield arrived. |
+| **Proven Models** | Alchemix's self-repaying loan, a model with real traction, moved to a new substrate. Not invented from scratch. |
+| **User Base Expansion** | Ethereum yield holders get a reason to hold a position on Creditcoin. Collateral stays where they trust it; credit lives here. |
+| **Product Vision** | Clear phases: v1 self-repaying loans → position NFTs → multi-strategy → writability unlocks withdrawals. |
+| **Execution Capability** | ~300 LoC on the critical path, one adapter already written, three steps to a working demo. |
+
+---
+
+## Demo script
+
+1. Two wallets deposit into `RiyaEscrow` → two proofs → collateral on Creditcoin.
+2. Both borrow at 10% LTV.
+3. **One** `harvest()` → **one** proof → *both* debts fall pro-rata. ← the shot
+4. Wallet A repays manually → debt clears, score does **not** move.
+5. Another harvest tips wallet B into the next tier → limit jumps → B redraws.
+
+Step 3 is the argument. Everything else is context.
+
+---
 
 ## Test checklist
 
