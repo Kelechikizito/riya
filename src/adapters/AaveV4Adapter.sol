@@ -6,22 +6,14 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 import {IAaveV4Spoke} from "../interfaces/IAaveV4Spoke.sol";
 
-/// @title AaveV4Adapter
-/// @notice Parks the source-chain vault's deposits in a single Aave V4 reserve and
-///         harvests the yield they earn back out to the vault.
-/// @dev Lives on Ethereum (Sepolia for the demo). Aave V4 replaces the V3 `Pool`
-///      with a `Spoke` that routes to a liquidity `Hub`; a reserve is addressed by
-///      a numeric `reserveId` rather than by the underlying's address, so the id is
-///      fixed at construction and the underlying is read back from the Spoke.
-///
-///      This contract deliberately holds no idle balance. Every asset it receives is
-///      supplied immediately, and every asset it withdraws leaves in the same call.
-///      That is what lets `harvest` satisfy the protocol's "real money has to arrive"
-///      rule: the yield is moved to the vault before anything is proven on Creditcoin,
-///      so the proof and the value travel together.
+/**
+ * @title AaveV4Adapter
+ * @author Kelechi Kizito Ugwu
+ * @notice Parks the source-chain vault's deposits in a single Aave V4 reserve and harvests the yield they earn back out to the vault.
+ * @dev Lives on Ethereum (Sepolia for the demo). Aave V4 replaces the V3 `Pool` with a `Spoke` that routes to a liquidity `Hub`; a reserve is addressed by a numeric `reserveId` rather than by the underlying's address, so the id is fixed at construction and the underlying is read back from the Spoke.
+ This contract deliberately holds no idle balance. Every asset it receives is supplied immediately, and every asset it withdraws leaves in the same call. That is what lets `harvest` satisfy the protocol's "real money has to arrive" rule: the yield is moved to the vault before anything is proven on Creditcoin, so the proof and the value travel together.
+ */
 contract AaveV4Adapter {
-    using SafeERC20 for IERC20;
-
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -32,20 +24,9 @@ contract AaveV4Adapter {
     error AaveV4Adapter__HarvestBelowMinimum(uint256 available, uint256 minimum);
 
     /*//////////////////////////////////////////////////////////////
-                                 EVENTS
+                            TYPE DECLARATIONS
     //////////////////////////////////////////////////////////////*/
-
-    /// @notice Emitted when the vault's assets are supplied to Aave.
-    event Deposited(uint256 assets, uint256 shares);
-
-    /// @notice Emitted when principal is pulled back out of Aave for the vault.
-    event Withdrawn(address indexed to, uint256 assets, uint256 shares);
-
-    /// @notice Emitted once harvested yield has actually landed in the vault.
-    /// @dev This is the source-chain event the watcher bot proves to the ASC. It is
-    ///      emitted after the transfer, so its presence in a successful transaction
-    ///      means the money moved.
-    event Harvested(address indexed caller, uint256 assets);
+    using SafeERC20 for IERC20;
 
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
@@ -72,6 +53,22 @@ contract AaveV4Adapter {
     /// @notice Assets supplied on the vault's behalf that are principal, not yield.
     /// @dev Everything Aave holds for this adapter above this figure is harvestable.
     uint256 public s_principal;
+
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Emitted when the vault's assets are supplied to Aave.
+    event Deposited(uint256 assets, uint256 shares);
+
+    /// @notice Emitted when principal is pulled back out of Aave for the vault.
+    event Withdrawn(address indexed to, uint256 assets, uint256 shares);
+
+    /// @notice Emitted once harvested yield has actually landed in the vault.
+    /// @dev This is the source-chain event the watcher bot proves to the ASC. It is
+    ///      emitted after the transfer, so its presence in a successful transaction
+    ///      means the money moved.
+    event Harvested(address indexed caller, uint256 assets);
 
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
