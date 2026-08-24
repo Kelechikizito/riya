@@ -7,16 +7,21 @@
 > multi-strategy roadmap claim, so it is worth doing deliberately rather than as
 > an afterthought.
 
-Before the interface itself — two landmines found while reading the refactored
-adapter. Both bite at checkpoint 6.
+Before the interface itself — two things about the refactored adapter's events
+that decide how checkpoint 6 is written. The first is a rule for reading logs;
+the second is a real hazard.
 
 ---
 
-## ⚠️ Landmine 1: `indexed` on the amount breaks the ASC
+## Note 1: `indexed` decides *where* the ASC reads, not *whether* it can
+
+> **Correction.** An earlier draft of this page called `uint256 indexed assets` a
+> bug that would break every harvest proof. That was wrong, and the events as
+> written are fine. Creditcoin's own guidance to index is sound. The reasoning
+> below is the corrected version.
 
 ```solidity
 event TokensHarvested(address indexed caller, uint256 indexed assets);
-//                                            ^^^^^^^ this is a bug
 ```
 
 ### What `indexed` actually does
@@ -34,35 +39,54 @@ data      →  unlimited ABI-encoded blob. NOT searchable.
 TokensHarvested(alice, 200)
   topics[0] = keccak256("TokensHarvested(address,uint256)")
   topics[1] = alice
-  topics[2] = 200
-  data      = 0x            ← EMPTY
+  topics[2] = 200          ← the value itself, not a hash
+  data      = 0x           ← empty, and that is fine
 ```
 
-At checkpoint 6 the ASC does `abi.decode(log.data, (uint256))` to read the yield
-amount. **Decoding an empty `data` reverts.** Every harvest proof would fail.
-
-### The rule
-
-> **Index what you filter by, not what you read.**
-
-You filter by *who*. You read *how much*.
+The value is not lost. `EvmV1Decoder` hands the ASC the whole log —
 
 ```solidity
-event TokensHarvested(address indexed caller, uint256 assets);
+struct LogEntry { address address_; bytes32[] topics; bytes data; }
 ```
 
-Same problem in the other two events:
+— so at checkpoint 6 the ASC reads the amount as:
 
-| Current | Should be | Why |
+```solidity
+uint256 gross = uint256(harvests[i].topics[2]);   // not abi.decode(.., data)
+```
+
+That is *simpler* than decoding `data`, not harder. The rule is that the reader
+matches the event, never the other way round.
+
+### The one case where indexing really does destroy the value
+
+| Indexed parameter type | What lands in the topic |
+|---|---|
+| `uint256`, `address`, `bool`, `bytes32` — **value types** | the value, fully recoverable |
+| `string`, `bytes`, arrays, structs — **dynamic types** | `keccak256(value)`. The value is **gone** |
+
+This is the trap worth remembering, and none of the three events go near it —
+every parameter in play is a `uint256` or an `address`.
+
+### What the three events cost
+
+| Event | Topics used | Note |
 |---|---|---|
-| `TokensDeposited(uint256 indexed assets, uint256 indexed shares)` | neither indexed | `data` is currently empty; nothing here is worth filtering on |
-| `TokensWithdrawn(address indexed to, uint256 indexed assets, uint256 indexed shares)` | only `to` indexed | 3 indexed is the legal *maximum*, not a target |
+| `TokensDeposited(uint256 indexed, uint256 indexed)` | 3 of 4 | `data` empty; both values read from topics |
+| `TokensWithdrawn(address indexed, uint256 indexed, uint256 indexed)` | 4 of 4 | at the legal ceiling — a fourth parameter would force un-indexing one |
+| `TokensHarvested(address indexed, uint256 indexed)` | 3 of 4 | the one the ASC proves |
 
-Indexing also costs more gas per topic. It is not free decoration.
+Gas is close to a wash and not worth optimising: an indexed word costs 375 (the
+`LOG` per-topic charge), an unindexed one 256 (8 gas × 32 bytes) — about 119 gas
+more per parameter.
+
+The only live constraint is the ceiling: 3 indexed parameters maximum on a
+non-anonymous event, because `topics[0]` is spent on the signature hash.
+`TokensWithdrawn` is already there.
 
 ---
 
-## ⚠️ Landmine 2: the event was renamed, and the ASC pins on the name
+## ⚠️ Note 2: the event was renamed, and the ASC pins on the name
 
 `Harvested` → `TokensHarvested`. Fine in itself, but the ASC identifies logs by
 hashing the **exact signature string**:
@@ -75,8 +99,12 @@ One character off and the log is silently skipped — not an error, just nothing
 happens. Note the types matter too: `(address,uint256)`, no spaces, no parameter
 names.
 
-`build-plan.md` still says `Harvested`. **Pick the name now and stop changing
-it** — from here it is baked into a constant on another chain.
+`indexed` is *not* part of that string, which is why note 1 is free of this
+concern — indexing a parameter never changes the hash. The name and the types do.
+
+`build-plan.md` has been updated to `TokensHarvested` throughout (step 0 now
+records the final names). **Stop renaming it from here** — it is about to be
+baked into a constant on another chain.
 
 ---
 

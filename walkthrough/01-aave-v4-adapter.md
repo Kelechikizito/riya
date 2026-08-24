@@ -142,14 +142,14 @@ if (available < i_minHarvest) revert ...;
 (, assets) = i_spoke.withdraw(i_reserveId, available, address(this));
 i_asset.safeTransfer(i_vault, assets);   // ← money moves
 
-emit Harvested(msg.sender, assets);      // ← THEN the event
+emit TokensHarvested(msg.sender, assets);      // ← THEN the event
 ```
 
 **The event fires after the transfer, and that ordering is the foundation of the
 entire security model.**
 
 Here's why. Checkpoint 6 will show that the ASC on Creditcoin proves a
-transaction and reads `Harvested` out of its logs. If the event were emitted
+transaction and reads `TokensHarvested` out of its logs. If the event were emitted
 *before* the transfer and the transfer then failed, the whole transaction reverts
 and the log never lands — fine. But if the emit came first and someone later
 restructured the function so a transfer failure could be swallowed, Creditcoin
@@ -249,7 +249,7 @@ different gas tokens:
 | | **Keeper** | **Readability worker** |
 |---|---|---|
 | Runs against | Ethereum | Creditcoin |
-| What it does | Sends `harvest()` | Sees `Harvested`, fetches proofs, calls `submit()` on the ASC |
+| What it does | Sends `harvest()` | Sees `TokensHarvested`, fetches proofs, calls `submit()` on the ASC |
 | Direction | **Writes** to Ethereum | **Reads** Ethereum, **writes** Creditcoin |
 | Pays gas in | ETH | CTC |
 | If it stops | No new yield events | Events pile up unproven, nothing reaches Creditcoin |
@@ -330,7 +330,7 @@ to hold value and state facts.
 
 1. Alice deposits $1,000, Bob deposits $3,000 → `s_principal == $4,000`.
 2. Aave grows the pooled position to $4,200.
-3. The keeper harvests $200 and emits `Harvested(keeper, 200)` — **one number,
+3. The keeper harvests $200 and emits `TokensHarvested(keeper, 200)` — **one number,
    no names in it at all.**
 4. The worker proves that transaction; the ASC verifies it.
 5. `LoanLedger.onHarvest(200)` on Creditcoin divides it: Alice holds 25% of the

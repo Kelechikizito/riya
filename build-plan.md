@@ -51,7 +51,7 @@ flowchart LR
     end
 
     E -.->|"Deposited event"| W(("watcher<br/>bot"))
-    A -.->|"Harvested event"| W
+    A -.->|"TokensHarvested event"| W
     W ==>|"proof"| ASC
 
     style ETH fill:#eef4ff,stroke:#5b7cc4
@@ -72,7 +72,7 @@ Deliberately boring. That is the point.
 | Contract | Job | Emits |
 |---|---|---|
 | **`RiyaEscrow`** (~40 LoC) | Take USDC, hand it to the adapter. Hold harvested yield as reserve. | `Deposited(user, assets)` |
-| **`AaveV4Adapter`** (built ✅) | Supply to Aave, track principal vs yield, pull yield out. | `Harvested(caller, assets)` |
+| **`AaveV4Adapter`** (built ✅) | Supply to Aave, track principal vs yield, pull yield out. | `TokensHarvested(caller, assets)` |
 
 No shares. No withdraw. No fee. No owner. No admin key.
 
@@ -128,7 +128,7 @@ sequenceDiagram
     K->>A: harvest()
     A->>A: yield = aaveBalance − principal
     A->>E: transfer gross yield 💵
-    A-->>W: emit Harvested(caller, gross)
+    A-->>W: emit TokensHarvested(caller, gross)
     Note right of A: money moves BEFORE the event.<br/>A successful tx means it really arrived.
     W->>ASC: submit(proof)
     ASC->>L: onHarvest(gross)
@@ -225,8 +225,25 @@ Each step maps back to a section of `alchemix.md`, the Alchemix v3 research note
 ## 0. Fix the build — done
 
 `AaveV4Adapter.sol` declared `TokensDeposited` / `TokensWithdrawn` but emitted
-`Deposited` / `Withdrawn`, so `forge build` failed. Declarations renamed back to
-`Deposited` / `Withdrawn` (commit `fa5c2ed`); steps 1–4 assume those signatures.
+`Deposited` / `Withdrawn`, so `forge build` failed. The declarations were briefly
+renamed back to `Deposited` / `Withdrawn` (commit `fa5c2ed`), then settled on the
+`Tokens<Verb>` naming in commit `e24dae8`.
+
+**The adapter's event names are now final:**
+
+```solidity
+event TokensDeposited(uint256 indexed assets, uint256 indexed shares);
+event TokensWithdrawn(address indexed to, uint256 indexed assets, uint256 indexed shares);
+event TokensHarvested(address indexed caller, uint256 indexed assets);
+```
+
+Steps 1–4 assume these signatures. `TokensHarvested`'s signature hash is
+hardcoded on Creditcoin (step 4), so **stop renaming it** — from here a one-character
+change silently breaks every harvest proof.
+
+Note `RiyaEscrow.Deposited` is a *different contract's* event and is unaffected by
+the adapter's naming.
+
 The empty `src/interfaces/IVault.sol` was removed at the same time — step 8
 recreates it.
 
@@ -262,7 +279,7 @@ split on Ethereum. Both moved to Creditcoin (steps 1–3), so all four are gone:
 |---|---|
 | `harvest()` gains `onlyVault` | It only needed gating because the vault wrapped it to take a fee. No fee on Ethereum ⇒ leave it permissionless, as written. |
 | Add a `principal()` view | It existed so the vault's `totalAssets()` could pin share price. No shares on Ethereum ⇒ no consumer. |
-| Rename `Harvested` → `YieldPulled` | The collision was with the *vault's* `Harvested`. The escrow emits no harvest event; the adapter's is the one proven. |
+| Rename `Harvested` → `YieldPulled` | The collision was with the *vault's* `Harvested`. The escrow emits no harvest event; the adapter's is the one proven. (The event has since been renamed `TokensHarvested` for an unrelated reason — see step 0.) |
 | Size `i_minHarvest` on gross | Gross is all there is now. The floor means what it says. |
 
 `s_principal` stays: `yieldAccrued()` needs it to tell principal from yield, and
@@ -347,8 +364,13 @@ There is no fee code on Ethereum. `harvest()` on the adapter stays exactly as
 committed: permissionless, moves gross yield into the escrow, emits
 
 ```
-Harvested(address indexed caller, uint256 assets)
+TokensHarvested(address indexed caller, uint256 indexed assets)
 ```
+
+Both parameters are `indexed`, so the amount arrives in `topics[2]` and the log's
+`data` is empty. The ASC reads it as `uint256(log.topics[2])`, not via
+`abi.decode` — see step 4. Indexing does not change the signature hash, which is
+still `keccak256("TokensHarvested(address,uint256)")`.
 
 The 15% split happens in `LoanLedger.onHarvest` (step 3) against the proven gross
 number.
@@ -509,7 +531,7 @@ contract RiyaASC {
     error RiyaASC__NoRelevantLog();
 
     bytes32 private constant DEPOSIT_SIG   = keccak256("Deposited(address,uint256)");
-    bytes32 private constant HARVESTED_SIG = keccak256("Harvested(address,uint256)");
+    bytes32 private constant HARVESTED_SIG = keccak256("TokensHarvested(address,uint256)");
 
     address public immutable i_escrow;        // RiyaEscrow on Sepolia
     address public immutable i_adapter;       // AaveV4Adapter on Sepolia
@@ -554,7 +576,8 @@ contract RiyaASC {
         for (uint256 i; i < harvests.length; ++i) {
             // Anyone can emit an identically-shaped event. Pin the emitter.
             if (harvests[i].address_ != i_adapter) continue;
-            uint256 gross = abi.decode(harvests[i].data, (uint256));
+            // `assets` is indexed, so it lives in topics[2], not in data.
+            uint256 gross = uint256(harvests[i].topics[2]);
             i_ledger.onHarvest(gross);
             handled = true;
         }
@@ -577,8 +600,34 @@ contract RiyaASC {
 Three checks carry the security: the replay key, `receiptStatus == 1`, and the
 `log.address_` pin. Dropping any one is exploitable.
 
+### Reading a value: `topics` or `data`
+
+`EvmV1Decoder.LogEntry` hands the ASC both halves of the log:
+
+```solidity
+struct LogEntry { address address_; bytes32[] topics; bytes data; }
+```
+
+Where a parameter lands is decided by `indexed` on the source-chain event, and
+the reader has to match:
+
+| Parameter | Read with |
+|---|---|
+| `indexed`, value type (`uint256`, `address`, `bool`, `bytes32`) | `log.topics[n]` + a cast |
+| not `indexed` | `abi.decode(log.data, (...))` |
+| `indexed`, dynamic type (`string`, `bytes`, array, struct) | **unreadable** — the topic holds `keccak256` of the value, not the value |
+
+The adapter indexes its amounts, so harvests are read from `topics[2]`. The
+escrow's `Deposited(address indexed user, uint256 assets)` leaves `assets`
+unindexed, so that one is an `abi.decode` — hence the two loops read differently.
+That asymmetry is fine, but it is load-bearing: change `indexed` on either event
+and the matching read here has to change with it.
+
+The last row is the only genuine trap, and neither event goes near it — every
+parameter in play is a `uint256` or an `address`.
+
 The two events now come from **different** source contracts — `Deposited` from
-the escrow, `Harvested` from the adapter — so the pin is per-event, not one
+the escrow, `TokensHarvested` from the adapter — so the pin is per-event, not one
 shared `i_sourceVault`. That is the cost of making Ethereum dumb: custody and
 strategy are separate contracts, and each is trusted only for its own event.
 
@@ -750,8 +799,8 @@ Step 3 is the argument. Everything else is context.
 - Pending yield above outstanding debt → surplus lands in `s_credit`.
 - Same proof twice → `RiyaASC__AlreadyConsumed`.
 - Reverted source tx (`status == 0`) → rejected.
-- `Harvested` emitted by an impostor contract → ignored.
-- `Deposited` emitted by the adapter, or `Harvested` by the escrow → ignored
+- `TokensHarvested` emitted by an impostor contract → ignored.
+- `Deposited` emitted by the adapter, or `TokensHarvested` by the escrow → ignored
   (the per-event address pins are not interchangeable).
 - Borrow above limit reverts; borrow at exactly the limit succeeds.
 - Borrow/repay loop does not raise the score.
