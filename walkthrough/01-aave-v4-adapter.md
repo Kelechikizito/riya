@@ -232,3 +232,161 @@ contract inherits.
 
 **Next:** Checkpoint 2 — `IYieldAdapter`, the seam between the escrow and the
 strategy.
+
+---
+
+# Answers to the `// @question:` markers in the contract
+
+## Q1 — Who calls `harvest()`? Is it the readability worker?
+
+**No.** And the reason is the thing you already said: *the job of the readability
+worker is to pick up events, c'est fini.* That's exactly right, and it's why it
+can't be the harvester.
+
+There are **two separate off-chain jobs**, on two different chains, paying two
+different gas tokens:
+
+| | **Keeper** | **Readability worker** |
+|---|---|---|
+| Runs against | Ethereum | Creditcoin |
+| What it does | Sends `harvest()` | Sees `Harvested`, fetches proofs, calls `submit()` on the ASC |
+| Direction | **Writes** to Ethereum | **Reads** Ethereum, **writes** Creditcoin |
+| Pays gas in | ETH | CTC |
+| If it stops | No new yield events | Events pile up unproven, nothing reaches Creditcoin |
+
+The worker is a *reader*. Making it call `harvest()` would turn it into an
+Ethereum writer — a different key, a different balance, a different failure mode.
+Keep them conceptually separate.
+
+**Practically for the hackathon:** they can be two functions in one Node process.
+Separate concerns, one deployment. Don't build two services.
+
+### "At what interval?"
+
+Neither job runs on a clock, and this is the interesting part.
+
+**The keeper uses an economic trigger, not a timer.** `yieldAccrued()` is a
+`view`, so reading it is **free** — an `eth_call`, no transaction, no gas:
+
+```
+every ~5 min:  read yieldAccrued()              ← free
+               if >= I_MIN_HARVEST: harvest()   ← costs ETH
+               else: do nothing
+```
+
+So **`I_MIN_HARVEST` *is* the schedule.** Set it high and you harvest rarely in
+big batches; set it low and you burn gas on dust. That is why it's a
+per-deployment immutable rather than a hardcoded constant — the right value
+depends on the gas price and the asset's decimals.
+
+**The worker doesn't poll on a timer either.** It subscribes to logs
+(`eth_getLogs` / a WebSocket filter) and reacts when one appears. Its only wait
+is for Attestcoin to attest the block containing the event — deliberately some
+blocks behind Ethereum's head, so re-orgs can't poison the attestation chain.
+
+### "Who pays for the gas?"
+
+- **Demo:** you do, in Sepolia ETH. Testnet gas is free from a faucet, so this
+  costs nothing and doesn't bind.
+- **Mainnet:** a genuine open question — say it out loud rather than paper over
+  it. `harvest()` is permissionless, meaning *anyone may* call it. Permissionless
+  is not the same as *incentivised*. Right now nobody is paid to.
+
+Three honest answers, in order of how much to trust them:
+
+1. **The team runs the keeper.** Simplest, true, fine to state in the submission.
+   The protocol fee accruing on Creditcoin is notionally what funds it.
+2. **Borrowers call it themselves.** Someone with $1,000 collateral and a $100
+   debt has a direct reason to trigger the harvest that pays it down.
+   Permissionless already allows this — no code needed.
+3. **A caller tip** — pay `msg.sender` a slice of the yield. Works, but it puts a
+   *fee on Ethereum*, and riya's thesis is that fees and policy live on
+   Creditcoin. Roadmap, not v1.
+
+---
+
+## Q2 — How does this adapter track multiple users?
+
+**It doesn't. It has exactly one user: the vault.**
+
+> The `// @answer` already in the contract — "never holds an idle balance" — is
+> true, but it answers a *different* question. That's about why `harvest()` is
+> **trustworthy**, not about **who owns what**. Worth rewriting that comment.
+
+The real answer is the whole thesis of the project:
+
+```
+Aave sees:        ONE supplier (the adapter). One pooled position.
+The adapter sees: ONE caller (I_VAULT). One number: s_principal.
+Creditcoin sees:  Alice, Bob, Carol — collateral, debt, score, each.
+```
+
+`s_principal` is a **single pooled figure** for everybody's money combined. The
+adapter has no mapping, no per-user anything — and it must not, because per-user
+accounting is a *decision*, and decisions live on Creditcoin. Ethereum's job is
+to hold value and state facts.
+
+### Trace how Alice gets her share
+
+1. Alice deposits $1,000, Bob deposits $3,000 → `s_principal == $4,000`.
+2. Aave grows the pooled position to $4,200.
+3. The keeper harvests $200 and emits `Harvested(keeper, 200)` — **one number,
+   no names in it at all.**
+4. The worker proves that transaction; the ASC verifies it.
+5. `LoanLedger.onHarvest(200)` on Creditcoin divides it: Alice holds 25% of the
+   collateral so $50 retires her debt; Bob holds 75% so $150 retires his.
+
+**The split happens on Creditcoin, from a single proven number.** That's
+checkpoint 8a, and it's why one proof can drop every borrower's debt at once —
+the demo's whole punchline.
+
+Had you built per-user tracking into the adapter, you'd have a copy of the ledger
+on Ethereum that could drift out of sync with the one on Creditcoin. Deleting it
+removes that entire bug class instead of guarding against it.
+
+---
+
+## Q3 — Why did we declare `shares` and not `assets`?
+
+```solidity
+function _deposit(uint256 amount) internal returns (uint256 assets) {
+    ...
+    uint256 shares;
+    (shares, assets) = I_SPOKE.supply(I_RESERVE_ID, amount, address(this));
+```
+
+**The literal answer is scoping.** `assets` is already declared — it's the
+*named return value* in the function signature, so it exists as a variable the
+moment the function starts. Re-declaring it would be a compile error. `shares`
+has no such declaration, so `uint256 shares;` gives the tuple's first element
+somewhere to land.
+
+You could equally write `(uint256 shares, uint256 a) = ...; assets = a;` — same
+thing, one extra line. Or drop it entirely with
+`(, assets) = I_SPOKE.supply(...)`, which is exactly what `_harvest()` does,
+because harvest doesn't care about shares.
+
+### The better question: why capture `shares` at all?
+
+Nothing reads it — it's only emitted. The answer is that **riya accounts in
+assets, never in shares.**
+
+Shares are Aave's internal unit and their value in dollars *drifts upward* as
+interest accrues. Assets are dollars. Look at the consequence:
+
+```solidity
+s_principal += assets;   // dollars in. Stays $1,000 forever.
+```
+
+If `s_principal` were denominated in shares, `yieldAccrued()` could no longer be
+a subtraction — it would need a share-price conversion, and **the conversion rate
+is precisely the thing that's changing.** You'd have reintroduced the index maths
+that `edge_case.md` §4 rejected as fragile.
+
+Keeping principal in assets makes yield one honest subtraction. And it matters
+downstream: Creditcoin's `LoanLedger` denominates collateral 1:1 with escrowed
+dollars, so **there is no share price anywhere in riya.** Nothing to drift,
+nothing to manipulate, nothing to round wrong.
+
+`shares` survives only in the event, as a breadcrumb for off-chain reconciliation
+against Aave. The ASC never reads it.
