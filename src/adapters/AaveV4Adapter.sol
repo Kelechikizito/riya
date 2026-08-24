@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 import {IAaveV4Spoke} from "src/interfaces/IAaveV4Spoke.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IYieldAdapter} from "src/interfaces/IYieldAdapter.sol";
 
 /**
  * @title AaveV4Adapter
@@ -13,9 +14,9 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  * @notice Parks the source-chain vault's deposits in a single Aave V4 reserve and harvests the yield they earn back out to the vault.
  * @dev Lives on Ethereum (Sepolia for the demo). Aave V4 replaces the V3 `Pool` with a `Spoke` that routes to a liquidity `Hub`; a reserve is addressed by a numeric `reserveId` rather than by the underlying's address, so the id is fixed at construction and the underlying is read back from the Spoke.
  *  This contract deliberately holds no idle balance. Every asset it receives is supplied immediately, and every asset it withdraws leaves in the same call. That is what lets `harvest` satisfy the protocol's "real money has to arrive" rule: the yield is moved to the vault before anything is proven on Creditcoin, so the proof and the value travel together.
- * @notice This adapter takes the vault's money and parks it in Aave V4 to earn interest. Over time, the amount Aave reports it's holding grows past what was originally deposited (s_principal) — that growth is yield. harvest() is the function that skims off just that yield and sends it back to the vault, leaving the original principal still earning interest in Aave.
+ * This adapter takes the vault's money and parks it in Aave V4 to earn interest. Over time, the amount Aave reports it's holding grows past what was originally deposited (s_principal) — that growth is yield. harvest() is the function that skims off just that yield and sends it back to the vault, leaving the original principal still earning interest in Aave.
  */
-contract AaveV4Adapter is ReentrancyGuard {
+contract AaveV4Adapter is IYieldAdapter, ReentrancyGuard {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
