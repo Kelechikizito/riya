@@ -2,7 +2,7 @@
 pragma solidity 0.8.30;
 
 /// @title IAaveV4Spoke
-/// @notice The subset of Aave V4's `ISpoke` that the source-chain vault actually uses.
+/// @notice The subset of Aave V4's `ISpoke` that the source-chain escrow actually uses.
 /// @dev Aave V4 replaces V3's `Pool` with a `Spoke` that routes user actions to a
 ///      liquidity `Hub`, and addresses a market by a numeric `reserveId` rather than
 ///      by the underlying's address.
