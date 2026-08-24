@@ -213,7 +213,7 @@ Two Solidity details that make this painless:
 
 ### 2. The `// @to-do: write the vault interface for later` — you don't need it
 
-On `I_VAULT = vault;`. Skip it. The test for why:
+On `I_ESCROW = vault;`. Skip it. The test for why:
 
 > **An interface is for calling something. `address` is for identifying
 > something.**
@@ -222,8 +222,8 @@ The adapter never *calls* the vault. It does exactly two things with that
 address:
 
 ```solidity
-if (msg.sender != I_VAULT) revert ...;      // comparison
-I_ASSET.safeTransfer(I_VAULT, assets);      // destination
+if (msg.sender != I_ESCROW) revert ...;      // comparison
+I_ASSET.safeTransfer(I_ESCROW, assets);      // destination
 ```
 
 Neither needs to know the vault has functions. Typing it as `IVault` would

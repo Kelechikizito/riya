@@ -81,8 +81,8 @@ INTERACTIONS
 
 The money moves user → escrow → adapter. You could imagine the user approving the
 adapter directly and saving a transfer. You cannot: the adapter's `_deposit` does
-`safeTransferFrom(I_VAULT, ...)` — it pulls specifically from the vault, and it
-is `onlyVault`.
+`safeTransferFrom(I_ESCROW, ...)` — it pulls specifically from the vault, and it
+is `onlyEscrow`.
 
 That is not an accident. **The escrow is the custody boundary**, and custody
 boundaries are worth one extra transfer.

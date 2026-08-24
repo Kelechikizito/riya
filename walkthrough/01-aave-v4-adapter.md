@@ -83,7 +83,7 @@ yield accounting reduces to "is `s_principal` right?"
 
 ## The functions
 
-### `deposit(uint256 amount) external onlyVault returns (uint256 assets)`
+### `deposit(uint256 amount) external onlyEscrow returns (uint256 assets)`
 
 Pull `amount` from the vault, hand it to Aave, record it as principal.
 
@@ -104,10 +104,10 @@ Two details:
   revert if you set a non-zero allowance over a non-zero one. `forceApprove`
   zeroes first.
 
-### `withdraw(uint256 amount, address to) external onlyVault returns (uint256 assets)`
+### `withdraw(uint256 amount, address to) external onlyEscrow returns (uint256 assets)`
 
 Pull principal back out. **This function has no caller in v1** — it's
-`onlyVault`, and the escrow never calls it.
+`onlyEscrow`, and the escrow never calls it.
 
 That's deliberate, and worth understanding rather than "fixing." Releasing
 collateral back to a user on Ethereum would require Creditcoin to send a message
@@ -317,7 +317,7 @@ The real answer is the whole thesis of the project:
 
 ```
 Aave sees:        ONE supplier (the adapter). One pooled position.
-The adapter sees: ONE caller (I_VAULT). One number: s_principal.
+The adapter sees: ONE caller (I_ESCROW). One number: s_principal.
 Creditcoin sees:  Alice, Bob, Carol — collateral, debt, score, each.
 ```
 
