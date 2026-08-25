@@ -28,7 +28,10 @@ contract DeployRiyaSourceChain is Script {
 
     /// @dev The escrow did not land where it was predicted, so the adapter is pointed at
     ///      an address with no code on it. Reverting here voids the whole deployment.
-    error DeployRiyaSourceChain__PredictionMissed(address predicted, address actual);
+    error DeployRiyaSourceChain__PredictionMissed(
+        address predicted,
+        address actual
+    );
 
     /*//////////////////////////////////////////////////////////////
                                  SCRIPT
@@ -43,9 +46,17 @@ contract DeployRiyaSourceChain is Script {
      * @return escrow The custody leg, and the only contract users touch.
      * @return helperConfig The per-chain parameters used, returned so tests can reuse them.
      */
-    function run() external returns (AaveV4Adapter adapter, RiyaEscrow escrow, HelperConfig helperConfig) {
-        helperConfig = new HelperConfig();
-        HelperConfig.NetworkConfig memory cfg = helperConfig.getConfig();
+    function run()
+        external
+        returns (AaveV4Adapter adapter, RiyaEscrow escrow, HelperConfig)
+    {
+        HelperConfig helperConfig = new HelperConfig();
+        (
+            address spoke,
+            uint256 reserveId,
+            uint256 minHarvest,
+            uint256 minDeposit
+        ) = helperConfig.activeNetworkConfig();
 
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerKey);
@@ -57,16 +68,24 @@ contract DeployRiyaSourceChain is Script {
         vm.startBroadcast(deployerKey);
 
         // Trusts the prediction — `predictedEscrow` has no code yet.
-        adapter = new AaveV4Adapter(predictedEscrow, IAaveV4Spoke(cfg.spoke), cfg.reserveId, cfg.minHarvest);
+        adapter = new AaveV4Adapter(
+            predictedEscrow,
+            IAaveV4Spoke(spoke),
+            reserveId,
+            minHarvest
+        );
 
         // Calls `adapter.asset()`, so the adapter must already exist. It does.
-        escrow = new RiyaEscrow(address(adapter), cfg.minDeposit);
+        escrow = new RiyaEscrow(address(adapter), minDeposit);
 
         vm.stopBroadcast();
 
         // The prediction is load-bearing, so prove it rather than assume it.
         if (address(escrow) != predictedEscrow) {
-            revert DeployRiyaSourceChain__PredictionMissed(predictedEscrow, address(escrow));
+            revert DeployRiyaSourceChain__PredictionMissed(
+                predictedEscrow,
+                address(escrow)
+            );
         }
 
         console2.log("deployer :", deployer);
