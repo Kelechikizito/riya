@@ -59,6 +59,7 @@ contract RiyaEscrow{
 
         // EFFECTS
         I_ADAPTER = IYieldAdapter(aaveAdapterAddress);
+        I_ASSET = IERC20(IYieldAdapter(aaveAdapterAddress).asset());
         I_MIN_DEPOSIT = minDeposit;
 
         // INTERACTIONS
@@ -67,6 +68,9 @@ contract RiyaEscrow{
     /*//////////////////////////////////////////////////////////////
                            EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+    function deposit(uint256 amount) external {
+        _deposit(amount);
+    }
 
     /*//////////////////////////////////////////////////////////////
                            INTERNAL FUNCTIONS
