@@ -8,6 +8,9 @@ remappings = [
     "foundry-devops/=lib/foundry-devops/",
     "@aave-v4/=lib/aave-v4/src/",
 ]
-rpc_endpoints = { mainnet_eth = "${ETH_MAINNET_RPC_URL}", sepolia_eth = "${ETH_SEPOLIA_RPC_URL}"}
+
+[rpc_endpoints]
+mainnet_eth = "${ETH_MAINNET_RPC_URL}"
+sepolia_eth = "${ETH_SEPOLIA_RPC_URL}"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
