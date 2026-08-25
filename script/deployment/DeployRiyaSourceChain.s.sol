@@ -7,6 +7,7 @@ import {console2} from "forge-std/console2.sol";
 import {AaveV4Adapter} from "src/adapters/AaveV4Adapter.sol";
 import {RiyaEscrow} from "src/source-chain/ethereum/RiyaEscrow.sol";
 import {IAaveV4Spoke} from "src/interfaces/IAaveV4Spoke.sol";
+import {HelperConfig} from "script/HelperConfig.s.sol";
 
 /**
  * @title DeployRiyaSourceChain
@@ -30,24 +31,6 @@ contract DeployRiyaSourceChain is Script {
     error DeployRiyaSourceChain__PredictionMissed(address predicted, address actual);
 
     /*//////////////////////////////////////////////////////////////
-                              CONFIGURATION
-    //////////////////////////////////////////////////////////////*/
-
-    /// @dev TODO: real Sepolia Spoke. Move these to a HelperConfig once the chain is picked.
-    address private constant SPOKE = address(0);
-
-    /// @dev TODO: the reserve id of the USDC market on `SPOKE`.
-    uint256 private constant RESERVE_ID = 0;
-
-    /// @notice Smallest harvest worth paying Ethereum gas for. 10 USDC (6 decimals).
-    /// @dev This is the keeper's schedule, not just a floor — it harvests when yield crosses it.
-    uint256 private constant MIN_HARVEST = 10e6;
-
-    /// @notice Smallest deposit worth a Creditcoin proof. 100 USDC (6 decimals).
-    /// @dev Guards the worker's CTC balance, not the escrow. Every deposit costs a proof.
-    uint256 private constant MIN_DEPOSIT = 100e6;
-
-    /*//////////////////////////////////////////////////////////////
                                  SCRIPT
     //////////////////////////////////////////////////////////////*/
 
@@ -58,8 +41,12 @@ contract DeployRiyaSourceChain is Script {
      *      Use a dedicated deploy key for exactly this reason.
      * @return adapter The strategy leg, supplying to Aave.
      * @return escrow The custody leg, and the only contract users touch.
+     * @return helperConfig The per-chain parameters used, returned so tests can reuse them.
      */
-    function run() external returns (AaveV4Adapter adapter, RiyaEscrow escrow) {
+    function run() external returns (AaveV4Adapter adapter, RiyaEscrow escrow, HelperConfig helperConfig) {
+        helperConfig = new HelperConfig();
+        HelperConfig.NetworkConfig memory cfg = helperConfig.getConfig();
+
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerKey);
 
@@ -70,10 +57,10 @@ contract DeployRiyaSourceChain is Script {
         vm.startBroadcast(deployerKey);
 
         // Trusts the prediction — `predictedEscrow` has no code yet.
-        adapter = new AaveV4Adapter(predictedEscrow, IAaveV4Spoke(SPOKE), RESERVE_ID, MIN_HARVEST);
+        adapter = new AaveV4Adapter(predictedEscrow, IAaveV4Spoke(cfg.spoke), cfg.reserveId, cfg.minHarvest);
 
         // Calls `adapter.asset()`, so the adapter must already exist. It does.
-        escrow = new RiyaEscrow(address(adapter), MIN_DEPOSIT);
+        escrow = new RiyaEscrow(address(adapter), cfg.minDeposit);
 
         vm.stopBroadcast();
 
