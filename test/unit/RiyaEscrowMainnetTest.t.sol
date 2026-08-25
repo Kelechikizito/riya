@@ -14,9 +14,17 @@ import {IAaveV4Spoke} from "src/interfaces/IAaveV4Spoke.sol";
 // Proves the adapter works; can't be the live demo.
 contract RiyaEscrowMainnetTest is Test {
     using SafeERC20 for IERC20;
-    uint256 ethMainnetFork;
-    uint256 ethSepoliaFork;
 
+    event TokensDepositedConfirmedByAdapter(
+        uint256 indexed assets,
+        uint256 indexed shares
+    );
+    event TokensDepositedConfirmedByEscrow(
+        address indexed user,
+        uint256 indexed assets
+    );
+
+    uint256 ethMainnetFork;
     AaveV4Adapter aaveAdapter;
     RiyaEscrow escrow;
 
@@ -31,7 +39,7 @@ contract RiyaEscrowMainnetTest is Test {
     uint256 private constant MIN_DEPOSIT = 100e6;
 
     address public USER = makeAddr("user");
-    uint256 USER_USDC_BALANCE = 10_000e6;
+    uint256 USER_USDC_BALANCE = 1000e6;
     uint256 USER_ETH_BALANCE = 1 ether;
 
     address predictedEscrow;
@@ -57,11 +65,35 @@ contract RiyaEscrowMainnetTest is Test {
 
     function testPredictedEscrowAddressIsTheSameAsActualEscrowAddress()
         external
+        view
     {
         // ASSERT
         console2.log("Predicted Escrow Address", predictedEscrow);
         console2.log("Actual Escrow Address", address(escrow));
 
         assertEq(predictedEscrow, address(escrow));
+    }
+
+    function testDepositWorksAndEmitsEvents() external {
+        // ARRANGE
+        /// @notice This is the USDC address on Ethereum Mainnet network
+        address ETH_MAINNET_USDC_ADDRESS = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+
+        // ACT
+        vm.deal(USER, USER_ETH_BALANCE);
+        /// @notice Foundry cheatcode to send tokens to an address
+        deal(ETH_MAINNET_USDC_ADDRESS, USER, USER_USDC_BALANCE);
+
+        /// @notice user has to approve YieldAggregator to spend her USDC tokens
+        vm.prank(USER);
+        IERC20(ETH_MAINNET_USDC_ADDRESS).forceApprove(
+            address(escrow),
+            USER_USDC_BALANCE
+        );
+
+        vm.prank(USER);
+        escrow.deposit(MIN_DEPOSIT);
+
+        // ASSERT
     }
 }
