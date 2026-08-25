@@ -9,9 +9,9 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 /**
  * @title RiyaEscrow
  * @author Kelechi Kizito Ugwu
- * @notice 
+ * @notice
  */
-contract RiyaEscrow{
+contract RiyaEscrow {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -96,6 +96,6 @@ contract RiyaEscrow{
 
         // EFFECTS
 
-        emit TokensDepositedConfirmedByEscrow(msg.sender, assets);   // @question: wh't the point of the event if the adapter will stilo emeit one?
+        emit TokensDepositedConfirmedByEscrow(msg.sender, assets); // @question: wh't the point of the event if the adapter will stilo emeit one?
     }
 }
