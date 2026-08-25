@@ -62,7 +62,7 @@ contract AaveV4Adapter is IYieldAdapter, ReentrancyGuard {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Emitted when the escrow's assets are supplied to Aave.
-    event TokensDeposited(uint256 indexed assets, uint256 indexed shares);
+    event TokensDepositedConfirmedByAdapter(uint256 indexed assets, uint256 indexed shares);
 
     /// @notice Emitted when principal is pulled back out of Aave for the escrow.
     event TokensWithdrawn(address indexed to, uint256 indexed assets, uint256 indexed shares);
@@ -152,7 +152,7 @@ contract AaveV4Adapter is IYieldAdapter, ReentrancyGuard {
         s_principal += assets;
         // @question: why did we define shares and not assets?
 
-        emit TokensDeposited(assets, shares);
+        emit TokensDepositedConfirmedByAdapter(assets, shares);
     }
 
     function _withdraw(uint256 amount, address to) internal returns (uint256 assets) {
