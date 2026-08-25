@@ -186,7 +186,7 @@ means `harvest()` simply reverts on the minimum check rather than underflowing.
 
 Follow that scenario downstream, because it's riya's honest risk: **if Aave is
 hacked or the reserve is impaired, the collateral shrinks but the Creditcoin debt
-doesn't.** riya never liquidates, so the protocol absorbs it. `edge_case.md` says
+doesn't.** riya never liquidates, so the protocol absorbs it. `research/edge_case.md` says
 to name this in the submission yourself. Judges respect a risk you surface before
 they find it.
 
@@ -381,7 +381,7 @@ s_principal += assets;   // dollars in. Stays $1,000 forever.
 If `s_principal` were denominated in shares, `yieldAccrued()` could no longer be
 a subtraction — it would need a share-price conversion, and **the conversion rate
 is precisely the thing that's changing.** You'd have reintroduced the index maths
-that `edge_case.md` §4 rejected as fragile.
+that `research/edge_case.md` §4 rejected as fragile.
 
 Keeping principal in assets makes yield one honest subtraction. And it matters
 downstream: Creditcoin's `LoanLedger` denominates collateral 1:1 with escrowed

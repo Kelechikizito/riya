@@ -172,7 +172,7 @@ deposit. Needs the sixth `IYieldAdapter` signature that was left out.
 
 ### 2. Should `Deposited`'s `assets` be indexed?
 
-`build-plan.md` leaves it unindexed, so checkpoint 6 reads it via
+`research/build-plan.md` leaves it unindexed, so checkpoint 6 reads it via
 `abi.decode(log.data, ...)` while harvests come from `topics[2]`. The plan flags
 that asymmetry as fine but load-bearing.
 

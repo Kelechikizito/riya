@@ -102,7 +102,7 @@ names.
 `indexed` is *not* part of that string, which is why note 1 is free of this
 concern — indexing a parameter never changes the hash. The name and the types do.
 
-`build-plan.md` has been updated to `TokensHarvested` throughout (step 0 now
+`research/build-plan.md` has been updated to `TokensHarvested` throughout (step 0 now
 records the final names). **Stop renaming it from here** — it is about to be
 baked into a constant on another chain.
 
@@ -233,7 +233,7 @@ circular conceptual dependency for zero benefit.
 
 The arrow points **one way**: escrow → adapter. Keep it that way.
 
-(`build-plan.md` step 8 mentions an `IVault` for scripts; scripts can use the
+(`research/build-plan.md` step 8 mentions an `IVault` for scripts; scripts can use the
 concrete type.)
 
 ---
