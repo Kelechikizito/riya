@@ -196,6 +196,12 @@ contract AaveV4Adapter is IYieldAdapter, ReentrancyGuard {
                          PUBLIC VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice The underlying asset of `I_RESERVE_ID`. Lets the escrow derive its own
+    ///         asset instead of being handed a second copy that could disagree.
+    function asset() external view returns (address) {
+        return address(I_ASSET);
+    }
+
     /**
      * @notice The adapter's current supplied balance in the reserve, principal plus yield.
      * @return The total supplied assets for this contract

@@ -7,4 +7,5 @@ interface IYieldAdapter {
     function harvest() external returns (uint256 assets);
     function totalAssets() external view returns (uint256);
     function yieldAccrued() external view returns (uint256);
+    function asset() external view returns (address);
 }
