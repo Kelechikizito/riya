@@ -91,7 +91,7 @@ contract HelperConfig is Script {
     // }
 
     /// @notice Real Aave V4. Used by the mainnet fork tests, not by the demo.
-    function getMainnetConfig() public view returns (NetworkConfig memory) {
+    function getMainnetConfig() public pure returns (NetworkConfig memory) {
         return
             NetworkConfig({
                 spoke: MAINNET_SPOKE,
