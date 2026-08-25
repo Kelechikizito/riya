@@ -8,10 +8,11 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IAaveV4Spoke} from "src/interfaces/IAaveV4Spoke.sol";
 
 // 1. Write Fork tests:  Fork-test against mainnet — against the real Spoke. Real V4, real reserve, no deploy.
 // Proves the adapter works; can't be the live demo.
-contract RiyaEscrowTest is Test {
+contract RiyaEscrowMainnetTest is Test {
     using SafeERC20 for IERC20;
     uint256 ethMainnetFork;
     uint256 ethSepoliaFork;
@@ -29,5 +30,38 @@ contract RiyaEscrowTest is Test {
     uint256 private constant MIN_HARVEST = 10e6;
     uint256 private constant MIN_DEPOSIT = 100e6;
 
-    function setUp() public {}
+    address public USER = makeAddr("user");
+    uint256 USER_USDC_BALANCE = 10_000e6;
+    uint256 USER_ETH_BALANCE = 1 ether;
+
+    address predictedEscrow;
+
+    function setUp() public {
+        /// @notice create a fork of Ethereum Mainnet network
+        ethMainnetFork = vm.createSelectFork("mainnet_eth");
+
+        uint256 nonce = vm.getNonce(USER);
+        predictedEscrow = vm.computeCreateAddress(USER, nonce + 1);
+
+        vm.prank(USER);
+        aaveAdapter = new AaveV4Adapter(
+            predictedEscrow,
+            IAaveV4Spoke(MAINNET_SPOKE),
+            MAINNET_USDC_RESERVE_ID,
+            MIN_HARVEST
+        );
+
+        vm.prank(USER);
+        escrow = new RiyaEscrow(address(aaveAdapter), MIN_DEPOSIT);
+    }
+
+    function testPredictedEscrowAddressIsTheSameAsActualEscrowAddress()
+        external
+    {
+        // ASSERT
+        console2.log("Predicted Escrow Address", predictedEscrow);
+        console2.log("Actual Escrow Address", address(escrow));
+
+        assertEq(predictedEscrow, address(escrow));
+    }
 }
