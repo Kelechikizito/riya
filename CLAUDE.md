@@ -104,3 +104,38 @@ deliberate, specific questions rather than filling the gap with assumptions.
 Good questions target: who the first 100 users actually are and why they show
 up, which Creditcoin primitive the design depends on, what the demo shows at
 submission time, and which proven model is being adapted.
+
+### Troubleshooting
+
+Answers from the Creditcoin team, verbatim. Treat these as authoritative over
+inference.
+
+**Q9. The precompile verifies transaction inclusion but not success status. How
+should teams handle that?**
+
+The proof can be decoded, and the status field will be 1 or 0. Alternatively,
+success can be verified with a block explorer on the source chain.
+
+**Q10. `forge script` fails against Creditcoin Testnet due to missing
+`prevRandao` in block headers. Is there a recommended workflow?**
+
+Set the following in your `foundry.toml`:
+
+```toml
+bypass_prevrandao = true
+```
+
+**Q11. Is there a recommended pattern for handling latency and event
+verification when contracts trigger cross-chain writes?**
+
+There is no single pattern. It depends on your build.
+
+You may or may not require an automated way, as part of your build, to react to
+activity done on a source chain or on Creditcoin, verify proofs, and then take a
+subsequent action once the proof is verified and contains the expected data.
+Some builds may require user intervention. Some builds may be entirely automated
+and react based on user activity on the source chain only.
+
+**Q12. Are there plans for Testnet writability during the hackathon window?**
+
+Not at the moment. Stay informed by following our Blog, X, and Discord server.
