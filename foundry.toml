@@ -9,6 +9,10 @@ remappings = [
     "@aave-v4/=lib/aave-v4/src/",
 ]
 
+# Creditcoin Testnet omits prevRandao from its block headers, which makes
+# `forge script` fail against it. Per the Creditcoin team (CLAUDE.md, Q10).
+bypass_prevrandao = true
+
 [rpc_endpoints]
 mainnet_eth = "${ETH_MAINNET_RPC_URL}"
 sepolia_eth = "${ETH_SEPOLIA_RPC_URL}"
