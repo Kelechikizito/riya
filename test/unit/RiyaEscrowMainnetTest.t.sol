@@ -91,9 +91,36 @@ contract RiyaEscrowMainnetTest is Test {
             USER_USDC_BALANCE
         );
 
+        /// @notice Expectations are registered BEFORE the call that emits, and matched in
+        ///         emission order. The escrow forwards to the adapter first, so the
+        ///         adapter's event fires first.
+        /// @dev The 5-arg form pins the emitter, so an identically-shaped event from any
+        ///      other contract will not satisfy it.
+
+        /// @notice `shares` is Aave's internal figure and not known ahead of time, so only
+        ///         topic 1 (`assets`) is checked here.
+        vm.expectEmit(true, false, false, false, address(aaveAdapter));
+        emit TokensDepositedConfirmedByAdapter(MIN_DEPOSIT, 0);
+
+        vm.expectEmit(true, true, false, false, address(escrow));
+        emit TokensDepositedConfirmedByEscrow(USER, MIN_DEPOSIT);
+
         vm.prank(USER);
         escrow.deposit(MIN_DEPOSIT);
 
         // ASSERT
+        /// @notice The escrow forwards everything, so it never holds a deposit.
+        assertEq(
+            IERC20(ETH_MAINNET_USDC_ADDRESS).balanceOf(address(escrow)),
+            0
+        );
+
+        /// @notice Principal is what Aave confirmed, and it is the basis of every yield figure.
+        assertEq(aaveAdapter.s_principal(), MIN_DEPOSIT);
+
+        assertEq(
+            IERC20(ETH_MAINNET_USDC_ADDRESS).balanceOf(USER),
+            USER_USDC_BALANCE - MIN_DEPOSIT
+        );
     }
 }
