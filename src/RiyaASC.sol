@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {EvmV1Decoder} from "@gluwa/usc-contracts/contracts/write-ability/common/EvmV1Decoder.sol";
-import {INativeQueryVerifier} from "@gluwa/usc-contracts/contracts/write-ability/common/INativeQueryVerifier.sol";
+import {
+    EvmV1Decoder
+} from "@gluwa/usc-contracts/contracts/write-ability/common/EvmV1Decoder.sol";
+import {
+    INativeQueryVerifier
+} from "@gluwa/usc-contracts/contracts/write-ability/common/INativeQueryVerifier.sol";
 
 abstract contract RiyaASC {
     // The block prover precompile does not validate if a transaction was successful or not.
@@ -27,12 +31,26 @@ abstract contract RiyaASC {
 
     // The ASC executes business logic immediately in the same transaction. Business logic execution either takes place in the ASC itself, or in a separate dApp contract which is called by the ASC.
 
-    bytes32 private constant ESCROW_DEPOSIT_EVENT_SIGNATURE = keccak256("TokensDepositedConfirmedByEscrow(address,uint256)");
-
-    bytes32 private constant ADAPTER_HARVEST_EVENT_SIGNATURE = keccak256("TokensHarvested(address,uint256)");
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
 
     /*//////////////////////////////////////////////////////////////
-                               FUNCTIONS
+                            STATE VARIABLES
+    //////////////////////////////////////////////////////////////*/
+
+    bytes32 private constant ESCROW_DEPOSIT_EVENT_SIGNATURE =
+        keccak256("TokensDepositedConfirmedByEscrow(address,uint256)");
+
+    bytes32 private constant ADAPTER_HARVEST_EVENT_SIGNATURE =
+        keccak256("TokensHarvested(address,uint256)");
+
+    address public immutable I_ESCROW; // trusted for DEPOSIT_SIG only
+
+    address public immutable I_ADAPTER; // trusted for HARVEST_SIG only
+
+    /*//////////////////////////////////////////////////////////////
+                           EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
     function mintFromQuery(
@@ -44,4 +62,12 @@ abstract contract RiyaASC {
         bytes32 lowerEndpointDigest,
         bytes32[] calldata continuityRoots
     ) external virtual returns (bool success);
+
+    /*//////////////////////////////////////////////////////////////
+                           INTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /*//////////////////////////////////////////////////////////////
+                      EXTERNAL VIEW/PURE FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
 }
