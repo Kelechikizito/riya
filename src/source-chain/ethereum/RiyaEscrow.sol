@@ -4,7 +4,9 @@ pragma solidity 0.8.30;
 import {IYieldAdapter} from "src/interfaces/IYieldAdapter.sol";
 // import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    SafeERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title RiyaEscrow
@@ -43,7 +45,10 @@ contract RiyaEscrow {
     /// @notice The event the readability worker proves to the ASC on Creditcoin.
     /// @dev The only event in the system that pairs a user with an amount, and the
     ///      figure carried here becomes their collateral on Creditcoin.
-    event TokensDepositedConfirmedByEscrow(address indexed user, uint256 indexed assets);
+    event TokensDepositedConfirmedByEscrow(
+        address indexed user,
+        uint256 indexed assets
+    );
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -59,7 +64,7 @@ contract RiyaEscrow {
 
         // EFFECTS
         I_ADAPTER = IYieldAdapter(aaveAdapterAddress);
-        I_ASSET = IERC20(IYieldAdapter(aaveAdapterAddress).asset());
+        I_ASSET = IERC20(IYieldAdapter(aaveAdapterAddress).asset()); // @audit
         I_MIN_DEPOSIT = minDeposit;
 
         // INTERACTIONS
