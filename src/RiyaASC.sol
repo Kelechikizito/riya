@@ -41,6 +41,7 @@ contract RiyaASC {
     error RiyaASC__NoRelevantLog();
     error RiyaASC__ZeroChainKey();
     error RiyaASC__ZeroAddress();
+    error RiyaASC__ZeroHeight();
 
     /*//////////////////////////////////////////////////////////////
                             TYPE DECLARATIONS
@@ -108,6 +109,10 @@ contract RiyaASC {
         INativeQueryVerifier.MerkleProof calldata merkleProof,
         INativeQueryVerifier.ContinuityProof calldata continuityProof
     ) external {
+        // CHECKS
+        if (height == 0) revert RiyaASC__ZeroHeight();
+        // EFFECTS
+        // INTERACTIONS
         uint64 txIndex = I_VERIFIER.calculateTxIndex(merkleProof);
         bytes32 key = keccak256(
             abi.encode(I_CHAIN_KEY, height, merkleProof.root, txIndex)
@@ -119,6 +124,7 @@ contract RiyaASC {
     /*//////////////////////////////////////////////////////////////
                            INTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+    function _submit() internal {}
 
     /*//////////////////////////////////////////////////////////////
                       EXTERNAL VIEW/PURE FUNCTIONS
