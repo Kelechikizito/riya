@@ -54,7 +54,7 @@ contract RiyaASC {
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
 
-    INativeQueryVerifier public immutable VERIFIER;
+    INativeQueryVerifier public immutable I_VERIFIER;
 
     uint64 public immutable I_CHAIN_KEY;
 
@@ -87,7 +87,7 @@ contract RiyaASC {
     //////////////////////////////////////////////////////////////*/
     constructor(uint64 chainKey, address escrow, address adapter) {
         // Get the precompile instance using the helper library
-        VERIFIER = NativeQueryVerifierLib.getVerifier();
+        I_VERIFIER = NativeQueryVerifierLib.getVerifier();
 
         if (chainKey == 0) revert RiyaASC__ZeroChainKey();
         if (escrow == address(0)) revert RiyaASC__ZeroAddress();
@@ -108,7 +108,7 @@ contract RiyaASC {
         INativeQueryVerifier.MerkleProof calldata merkleProof,
         INativeQueryVerifier.ContinuityProof calldata continuityProof
     ) external {
-        uint64 txIndex = VERIFIER.calculateTxIndex(merkleProof);
+        uint64 txIndex = I_VERIFIER.calculateTxIndex(merkleProof);
         bytes32 key = keccak256(
             abi.encode(I_CHAIN_KEY, height, merkleProof.root, txIndex)
         );
