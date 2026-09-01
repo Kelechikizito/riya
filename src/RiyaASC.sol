@@ -236,9 +236,16 @@ contract RiyaASC {
      * @notice Turns the verified logs into ledger updates.
      * @param key The replay key, carried through only so `ProofConsumed` can quote it.
      * @param receipt The decoded receipt of a transaction already proven to have succeeded.
-     * @dev Every parameter of both riya events is `indexed`, so `data` is empty and the layout is `topics = [signature, param1, param2]`. Values are read out of `topics`, never with `abi.decode(log.data, ...)` — that would revert on an empty byte string.
+     * @dev Every parameter of both riya events is `indexed`, so `data` is empty and the
+     *      layout is `topics = [signature, param1, param2]`. Values are read out of
+     *      `topics`, never with `abi.decode(log.data, ...)` — that would revert on an
+     *      empty byte string.
      *
-     * Harvests are processed before deposits. They cannot share a transaction today, but if they ever did, this is the correct order: a depositor who arrived in that same transaction was not in the pool when the yield accrued and should not share it. // question: why are harvest proceessed before deposits where users deposits before harvest?
+     *      Harvests are processed before deposits. The ordering is within a single
+     *      transaction, not across time — deposits made in earlier transactions are
+     *      already credited, so the question only arises for one transaction carrying
+     *      both. There the depositor arrived after the yield had accrued and should not
+     *      share it, so paying the harvest out first is exactly what excludes them.
      */
     function _dispatch(
         bytes32 key,
@@ -247,7 +254,9 @@ contract RiyaASC {
         bool handled;
 
         // Loops rather than single reads: one transaction may emit the same event many times.
-        // getLogsByEventSignature filters only on topics[0], so an attacker's contract emitting TokensHarvested(address, uint256)
+        // `getLogsByEventSignature` filters only on topics[0], so an attacker's contract
+        // emitting `TokensHarvested(address,uint256)` lands in this array too. The
+        // `address_` pin below is the only thing that excludes it.
         EvmV1Decoder.LogEntry[] memory harvestsLogs = EvmV1Decoder
             .getLogsByEventSignature(receipt, ADAPTER_HARVEST_EVENT_SIGNATURE);
 
@@ -260,7 +269,13 @@ contract RiyaASC {
             // Why continue and not revert: if it reverted, an attacker could stick a fake log next to your real harvest in the same transaction and permanently block that real proof from ever being processed. Skipping lets the real one through.
             if (harvestsLogs[i].topics.length < MIN_TOPICS) continue;
 
-            uint256 gross = uint256(harvestsLogs[i].topics[2]); // question: what about the caller, isn't there a place for the address/msg.sender(caller)
+            // `topics[1]` holds the caller, and is deliberately unread. `harvest()` is
+            // permissionless, so that address is whoever poked it on Ethereum — an
+            // arbitrary party with no claim on the yield. `onHarvest` splits `gross`
+            // pro-rata across open positions, so the caller's identity goes unused. The
+            // deposit loop below does read `topics[1]`, because there it is the
+            // depositor, who does have a claim.
+            uint256 gross = uint256(harvestsLogs[i].topics[2]);
             I_LEDGER.onHarvest(gross);
             handled = true;
 
