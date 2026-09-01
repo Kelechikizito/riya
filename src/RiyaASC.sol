@@ -102,7 +102,10 @@ contract RiyaASC {
     ///      key reads `false` for free.
     mapping(bytes32 key => bool isConsumed) private s_consumed;
 
-    uint256 private constant LOGS_LENGTH = 3;
+    /// @dev The minimum number of topics a riya log must carry: `topics[0]` is the event
+    ///      signature, `topics[1]` and `topics[2]` the two indexed parameters. A log with
+    ///      fewer shares topic0 but not the shape, and reading `topics[2]` on it reverts.
+    uint256 private constant MIN_TOPICS = 3;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -255,7 +258,7 @@ contract RiyaASC {
             // if this log doesn't have 3 topics, like my event — skip it instead of crashing on it.
             // Reading `topics[2]` on a less than-3-topic log reverts.
             // Why continue and not revert: if it reverted, an attacker could stick a fake log next to your real harvest in the same transaction and permanently block that real proof from ever being processed. Skipping lets the real one through.
-            if (harvestsLogs[i].topics.length < LOGS_LENGTH) continue;
+            if (harvestsLogs[i].topics.length < MIN_TOPICS) continue;
 
             uint256 gross = uint256(harvestsLogs[i].topics[2]); // question: what about the caller, isn't there a place for the address/msg.sender(caller)
             I_LEDGER.onHarvest(gross);
@@ -269,7 +272,7 @@ contract RiyaASC {
 
         for (uint256 i; i < depositsLogs.length; ++i) {
             if (depositsLogs[i].address_ != I_ESCROW_CONTRACT) continue;
-            if (depositsLogs[i].topics.length < LOGS_LENGTH) continue;
+            if (depositsLogs[i].topics.length < MIN_TOPICS) continue;
 
             address user = address(uint160(uint256(depositsLogs[i].topics[1])));
             uint256 assets = uint256(depositsLogs[i].topics[2]);
