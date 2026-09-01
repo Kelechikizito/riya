@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {EvmV1Decoder} from "@gluwa/usc-contracts/contracts/write-ability/common/EvmV1Decoder.sol";
+import {
+    EvmV1Decoder
+} from "@gluwa/usc-contracts/contracts/write-ability/common/EvmV1Decoder.sol";
 import {
     INativeQueryVerifier,
     NativeQueryVerifierLib
@@ -45,7 +47,7 @@ contract RiyaASC {
     //////////////////////////////////////////////////////////////*/
     error RiyaASC__AlreadyConsumed(bytes32 key);
     error RiyaASC__ProofInvalid();
-    error RiyaASC__TxReverted();
+    error RiyaASC__TxReverted(bytes failedTransaction);
     error RiyaASC__NoRelevantLog();
     error RiyaASC__ZeroChainKey();
     error RiyaASC__ZeroAddress();
@@ -65,18 +67,12 @@ contract RiyaASC {
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev The Block Prover Precompile. Constant in practice — `getVerifier()` returns a
-    ///      hardcoded `0x0FD2` — and `immutable` only because a `constant` initialiser
-    ///      cannot be a function call. Public so a test or a judge can confirm the wiring
-    ///      without reading bytecode.
+    /// @dev The Block Prover Precompile. Constant hardcoded `0x0FD2`
     INativeQueryVerifier public immutable I_VERIFIER;
 
     /// @dev Attestcoin's index into the attested-chain registry of *this* Creditcoin
     ///      network — not an EVM chain id, and not global. Creditcoin Testnet registers
-    ///      Sepolia as `1` and Ethereum Mainnet as `3`, so it is load-bearing today:
-    ///      `submit` takes no `chainKey` argument precisely so a caller cannot swap a
-    ///      Sepolia proof for a Mainnet one. Pinning the escrow address does not save you
-    ///      — the same address can exist on both chains.
+    ///      Sepolia as `1` and Ethereum Mainnet as `3`.
     uint64 public immutable I_CHAIN_KEY;
 
     /// @dev topic0 of `RiyaEscrow`'s deposit event. Written as the hashed string rather
@@ -90,15 +86,13 @@ contract RiyaASC {
         keccak256("TokensDepositedConfirmedByEscrow(address,uint256)");
 
     /// @dev topic0 of `AaveV4Adapter`'s harvest event.
-    bytes32 private constant ADAPTER_HARVEST_EVENT_SIGNATURE = keccak256("TokensHarvested(address,uint256)");
+    bytes32 private constant ADAPTER_HARVEST_EVENT_SIGNATURE =
+        keccak256("TokensHarvested(address,uint256)");
 
     /// @dev `RiyaEscrow` on the source chain. Trusted for the deposit signature only.
     address public immutable I_ESCROW_CONTRACT;
 
     /// @dev `AaveV4Adapter` on the source chain. Trusted for the harvest signature only.
-    ///      Two pins rather than one, because making Ethereum dumb split custody from
-    ///      strategy. Crossing them — accepting a deposit log from the adapter — is a
-    ///      distinct bug with its own test.
     address public immutable I_ADAPTER_CONTRACT;
 
     /// @dev Where every decision in the system actually lives.
@@ -118,7 +112,11 @@ contract RiyaASC {
     /// @param key The replay key of the source-chain transaction.
     /// @param action Which event was found inside it.
     /// @param value Assets deposited, or gross yield harvested.
-    event ProofConsumed(bytes32 indexed key, RiyaASCActions indexed action, uint256 value);
+    event ProofConsumed(
+        bytes32 indexed key,
+        RiyaASCActions indexed action,
+        uint256 value
+    );
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -138,14 +136,19 @@ contract RiyaASC {
      *      `ledger` is circular with `LoanLedger`'s own ASC pin, so both sides come from
      *      one script using `vm.computeCreateAddress`, exactly like the escrow/adapter pair.
      */
-    constructor(uint64 chainKey, address escrow, address adapter, address ledger) {
-        // Get the precompile instance using the helper library
-        I_VERIFIER = NativeQueryVerifierLib.getVerifier();
-
+    constructor(
+        uint64 chainKey,
+        address escrow,
+        address adapter,
+        address ledger
+    ) {
         if (chainKey == 0) revert RiyaASC__ZeroChainKey();
         if (escrow == address(0)) revert RiyaASC__ZeroAddress();
         if (adapter == address(0)) revert RiyaASC__ZeroAddress();
         if (ledger == address(0)) revert RiyaASC__ZeroAddress();
+
+        // Get the precompile instance using the helper library
+        I_VERIFIER = NativeQueryVerifierLib.getVerifier();
 
         I_CHAIN_KEY = chainKey;
         I_ESCROW_CONTRACT = escrow;
@@ -177,34 +180,45 @@ contract RiyaASC {
      */
     function submit(
         uint64 height,
-        bytes calldata encodedTransaction,
+        bytes calldata encodedTransaction, // question: why not bytes32?
         INativeQueryVerifier.MerkleProof calldata merkleProof,
         INativeQueryVerifier.ContinuityProof calldata continuityProof
     ) external {
+        // CHECKS
+
+        // STEP 0
         if (height == 0) revert RiyaASC__ZeroHeight();
 
-        // 1 · One proof, one use. Chain + height + root + index names a transaction:
-        //     no two distinct transactions share all four, and the same one always
-        //     produces the same four.
-        uint64 txIndex = I_VERIFIER.calculateTxIndex(merkleProof);
-        bytes32 key = keccak256(abi.encode(I_CHAIN_KEY, height, merkleProof.root, txIndex));
+        // STEP 1: Replay protection
+        // 1 · One proof, one use. Chain + height + root + index names a transaction: no two distinct transactions share all four, and the same one always produces the same four.
+        uint64 txIndex = I_VERIFIER.calculateTxIndex(merkleProof); // The transaction index is simply the position of a transaction within its block — if a block holds 150 transactions, the first is index 0, the last is index 149.
+        bytes32 key = keccak256(
+            abi.encode(I_CHAIN_KEY, height, merkleProof.root, txIndex)
+        );
         if (s_consumed[key]) revert RiyaASC__AlreadyConsumed(key);
         s_consumed[key] = true;
 
-        // 2 · Did this transaction really happen on the source chain?
-        //     `verifyAndEmit` over `verify` costs a little gas and buys a
-        //     `TransactionVerified` log written by the precompile itself — an audit trail
-        //     this contract could not have faked.
-        if (!I_VERIFIER.verifyAndEmit(I_CHAIN_KEY, height, encodedTransaction, merkleProof, continuityProof)) {
+        // STEP 2: Precompile verification
+        // 2 · Did this transaction really happen on the source chain? `verifyAndEmit` over `verify` costs a little gas and buys a `TransactionVerified` log written by the precompile itself — an audit trail this contract could not have faked.
+        if (
+            !I_VERIFIER.verifyAndEmit(
+                I_CHAIN_KEY,
+                height,
+                encodedTransaction,
+                merkleProof,
+                continuityProof
+            )
+        ) {
             revert RiyaASC__ProofInvalid();
         }
 
-        // 3 · Inclusion is not success. A reverted transaction still sits in a block and
-        //     still proves cleanly.
-        EvmV1Decoder.ReceiptFields memory receipt = EvmV1Decoder.decodeReceiptFields(encodedTransaction);
-        if (receipt.receiptStatus != 1) revert RiyaASC__TxReverted();
+        // STEP 3: Success check
+        // This step checks the transaction in the block didn't revert using the receiptStatus
+        EvmV1Decoder.ReceiptFields memory receipt = EvmV1Decoder
+            .decodeReceiptFields(encodedTransaction);
+        if (receipt.receiptStatus != 1) revert RiyaASC__TxReverted(encodedTransaction);
 
-        // 4 · Who emitted what, and what it means.
+        /// STEP 4: Dispatch
         _dispatch(key, receipt);
     }
 
@@ -226,13 +240,16 @@ contract RiyaASC {
      *      that same transaction was not in the pool when the yield accrued and should not
      *      share it.
      */
-    function _dispatch(bytes32 key, EvmV1Decoder.ReceiptFields memory receipt) internal {
+    function _dispatch(
+        bytes32 key,
+        EvmV1Decoder.ReceiptFields memory receipt
+    ) internal {
         bool handled;
 
         // Loops rather than single reads: one transaction may emit the same event many
         // times. It cannot today, but the loop costs nothing and removes an assumption.
-        EvmV1Decoder.LogEntry[] memory harvests =
-            EvmV1Decoder.getLogsByEventSignature(receipt, ADAPTER_HARVEST_EVENT_SIGNATURE);
+        EvmV1Decoder.LogEntry[] memory harvests = EvmV1Decoder
+            .getLogsByEventSignature(receipt, ADAPTER_HARVEST_EVENT_SIGNATURE);
 
         for (uint256 i; i < harvests.length; ++i) {
             // The pin. Anyone can emit an identically-shaped event; nobody can emit it
@@ -250,8 +267,8 @@ contract RiyaASC {
             emit ProofConsumed(key, RiyaASCActions.AdapterHarvested, gross);
         }
 
-        EvmV1Decoder.LogEntry[] memory deposits =
-            EvmV1Decoder.getLogsByEventSignature(receipt, ESCROW_DEPOSIT_EVENT_SIGNATURE);
+        EvmV1Decoder.LogEntry[] memory deposits = EvmV1Decoder
+            .getLogsByEventSignature(receipt, ESCROW_DEPOSIT_EVENT_SIGNATURE);
 
         for (uint256 i; i < deposits.length; ++i) {
             if (deposits[i].address_ != I_ESCROW_CONTRACT) continue;
