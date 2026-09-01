@@ -102,6 +102,8 @@ contract RiyaASC {
     ///      key reads `false` for free.
     mapping(bytes32 key => bool isConsumed) private s_consumed;
 
+    uint256 private constant LOGS_LENGTH = 3;
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -216,7 +218,8 @@ contract RiyaASC {
         // This step checks the transaction in the block didn't revert using the receiptStatus
         EvmV1Decoder.ReceiptFields memory receipt = EvmV1Decoder
             .decodeReceiptFields(encodedTransaction);
-        if (receipt.receiptStatus != 1) revert RiyaASC__TxReverted(encodedTransaction);
+        if (receipt.receiptStatus != 1)
+            revert RiyaASC__TxReverted(encodedTransaction);
 
         /// STEP 4: Dispatch
         _dispatch(key, receipt);
@@ -230,15 +233,9 @@ contract RiyaASC {
      * @notice Turns the verified logs into ledger updates.
      * @param key The replay key, carried through only so `ProofConsumed` can quote it.
      * @param receipt The decoded receipt of a transaction already proven to have succeeded.
-     * @dev Every parameter of both riya events is `indexed`, so `data` is empty and the
-     *      layout is `topics = [signature, param1, param2]`. Values are read out of
-     *      `topics`, never with `abi.decode(log.data, ...)` — that would revert on an
-     *      empty byte string.
+     * @dev Every parameter of both riya events is `indexed`, so `data` is empty and the layout is `topics = [signature, param1, param2]`. Values are read out of `topics`, never with `abi.decode(log.data, ...)` — that would revert on an empty byte string.
      *
-     *      Harvests are processed before deposits. They cannot share a transaction today,
-     *      but if they ever did, this is the correct order: a depositor who arrived in
-     *      that same transaction was not in the pool when the yield accrued and should not
-     *      share it.
+     * Harvests are processed before deposits. They cannot share a transaction today, but if they ever did, this is the correct order: a depositor who arrived in that same transaction was not in the pool when the yield accrued and should not share it. // question: why are harvest proceessed before deposits where users deposits before harvest?
      */
     function _dispatch(
         bytes32 key,
@@ -246,36 +243,36 @@ contract RiyaASC {
     ) internal {
         bool handled;
 
-        // Loops rather than single reads: one transaction may emit the same event many
-        // times. It cannot today, but the loop costs nothing and removes an assumption.
-        EvmV1Decoder.LogEntry[] memory harvests = EvmV1Decoder
+        // Loops rather than single reads: one transaction may emit the same event many times.
+        // getLogsByEventSignature filters only on topics[0], so an attacker's contract emitting TokensHarvested(address, uint256)
+        EvmV1Decoder.LogEntry[] memory harvestsLogs = EvmV1Decoder
             .getLogsByEventSignature(receipt, ADAPTER_HARVEST_EVENT_SIGNATURE);
 
-        for (uint256 i; i < harvests.length; ++i) {
-            // The pin. Anyone can emit an identically-shaped event; nobody can emit it
-            // from the adapter's address.
-            if (harvests[i].address_ != I_ADAPTER_CONTRACT) continue;
-            // Not paranoia about riya's own events — a guard against a log that shares
-            // topic0 but not the shape. Reading `topics[2]` on a two-topic log reverts,
-            // and reverting is the griefing outcome this whole function avoids.
-            if (harvests[i].topics.length < 3) continue;
+        for (uint256 i; i < harvestsLogs.length; ++i) {
+            // This line protects the ASC contract from identical logs from any contract except the adapter contract.
+            if (harvestsLogs[i].address_ != I_ADAPTER_CONTRACT) continue;
 
-            uint256 gross = uint256(harvests[i].topics[2]);
+            // if this log doesn't have 3 topics, like my event — skip it instead of crashing on it.
+            // Reading `topics[2]` on a less than-3-topic log reverts.
+            // Why continue and not revert: if it reverted, an attacker could stick a fake log next to your real harvest in the same transaction and permanently block that real proof from ever being processed. Skipping lets the real one through.
+            if (harvestsLogs[i].topics.length < LOGS_LENGTH) continue;
+
+            uint256 gross = uint256(harvestsLogs[i].topics[2]); // question: what about the caller, isn't there a place for the address/msg.sender(caller)
             I_LEDGER.onHarvest(gross);
             handled = true;
 
             emit ProofConsumed(key, RiyaASCActions.AdapterHarvested, gross);
         }
 
-        EvmV1Decoder.LogEntry[] memory deposits = EvmV1Decoder
+        EvmV1Decoder.LogEntry[] memory depositsLogs = EvmV1Decoder
             .getLogsByEventSignature(receipt, ESCROW_DEPOSIT_EVENT_SIGNATURE);
 
-        for (uint256 i; i < deposits.length; ++i) {
-            if (deposits[i].address_ != I_ESCROW_CONTRACT) continue;
-            if (deposits[i].topics.length < 3) continue;
+        for (uint256 i; i < depositsLogs.length; ++i) {
+            if (depositsLogs[i].address_ != I_ESCROW_CONTRACT) continue;
+            if (depositsLogs[i].topics.length < LOGS_LENGTH) continue;
 
-            address user = address(uint160(uint256(deposits[i].topics[1])));
-            uint256 assets = uint256(deposits[i].topics[2]);
+            address user = address(uint160(uint256(depositsLogs[i].topics[1])));
+            uint256 assets = uint256(depositsLogs[i].topics[2]);
             I_LEDGER.onDeposit(user, assets);
             handled = true;
 
