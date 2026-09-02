@@ -314,5 +314,5 @@ contract RiyaASC {
     /// @dev Lets the worker skip a resubmission instead of discovering it in a revert.
     function isConsumed(bytes32 key) external view returns (bool) {
         return s_consumed[key];
-    }
+    } // @question: how does the readability worker claculate the bytes32 key?
 }
