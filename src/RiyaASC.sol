@@ -246,6 +246,7 @@ contract RiyaASC {
      *      already credited, so the question only arises for one transaction carrying
      *      both. There the depositor arrived after the yield had accrued and should not
      *      share it, so paying the harvest out first is exactly what excludes them.
+     * The only thing this ordering rule touches is: what if one single transaction contains both a harvest log and a deposit log at the same time?
      */
     function _dispatch(
         bytes32 key,
