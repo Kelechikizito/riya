@@ -10,6 +10,17 @@
 > state something, they win over inference — and where riya deviates from the shape they
 > assume, this checkpoint says so explicitly.
 
+> **Revised after adopting [`@gluwa/usc-sdk`](https://docs.attestcoin.org/attestcoin-protocol/dapp-builder-infrastructure/attestcoin-sdk-usc-sdk).**
+> The first draft of this checkpoint was written against the prose docs alone and carried
+> five open unknowns. The SDK is now installed and its type definitions are the
+> authority — they close three of those unknowns, correct the stack choice (**ethers v6,
+> not viem**), and reveal a **second precompile at `0x0FD3`** the earlier draft did not
+> know existed. Sections that changed say so in place rather than quietly reading as if
+> they were always right.
+>
+> Note the naming: *"USC (Universal Smart Contract) was replaced with the term Attestcoin
+> Protocol"* but the package is still `usc-sdk`. Same thing, older name.
+
 ---
 
 ## The question this answers
@@ -275,39 +286,96 @@ exactly that reason.
 then go. Do not retry-storm the prover in the gap — a proof request for an unattested
 block is a request that cannot succeed, no matter how many times you send it.
 
-> **Unknown to resolve:** the docs' sequence diagram shows `Worker → Oracle: Check if
-> Block Attested`, but `INativeQueryVerifier` exposes only `verify`, `verifyAndEmit` and
-> `calculateTxIndex` — none of which answer "is height N attested yet?". The attestation
-> registry is a separate surface. Find the actual call before designing the polling loop;
-> the fallback is to attempt `verify` (the `view` overload, which costs nothing and
-> cannot revert state) and treat `false` as "not yet".
+#### Resolved: there is a second precompile, and it answers this directly
 
-### 3 · Prove — request shape is not yet pinned down
+The earlier draft of this checkpoint guessed that the attestation registry was "a separate
+surface" and proposed falling back to a `view` call on `verify`. **The guess was right and
+the fallback is unnecessary.** riya was only ever looking at *one* precompile:
 
-Two descriptions exist and they do not match:
+| Precompile | Address | Answers |
+|---|---|---|
+| Block Prover | `0x…0FD2` | "did this transaction happen?" |
+| **Chain Info** | **`0x…0FD3`** | **"is height N attested yet?"**, and which chains are supported |
 
-- `research/notes.md`: *"an endpoint like `proof-by-tx/{chain_key}/{tx_hash}`"*
-- the docs' sequence diagram: *"Request Proofs (chainKey, blockHeight, txHash)"* — three
-  parameters, including a height the path form does not carry.
+`@gluwa/usc-sdk`'s `chainInfo.PrecompileChainInfoProvider` wraps `0x0FD3` and exposes
+exactly the missing call:
 
-For the demo, `chain_key = 1` (Sepolia, on Creditcoin Testnet — see
-`research/environments.md`). Two further open items from `environments.md` bite here, and
-both are the worker's problem:
+```ts
+getLatestAttestedHeightAndHash(chainKey) -> { height, hash, isAttestation, exists }
+getContinuityBounds(chainKey, height)    -> { …, isAttested: boolean }
+waitUntilHeightAttested(chainKey, targetHeight, pollIntervalMs?, waitTimeoutMs?)
+```
 
-- **Which prover URL.** The testnet page shows both
-  `https://prover.cc3-testnet.creditcoin.network/` and
-  `https://proof-gen-api.cc3-testnet.creditcoin.network/`.
-- **WSS-only RPC.** Only `wss://rpc.cc3-testnet.creditcoin.network` is documented. That
-  blocks `forge script`, but it does **not** block the worker — a long-lived bot with a
-  WebSocket transport is the one consumer for which WSS is the natural fit. viem's
-  `webSocket()` transport handles it.
+So step 2 is one SDK call, not a polling loop you write.
 
-> **Do this before writing any code:** hit the prover with a known Sepolia transaction
-> hash and print the raw response. The `MerkleProof` / `ContinuityProof` structs
-> `RiyaASC.submit` expects are known exactly (checkpoint 6); the JSON the prover returns
-> is not, and neither is which field carries `height` or whether `encodedTransaction`
-> arrives hex-prefixed. A thirty-minute spike here saves a day of guessing at a mapping
-> layer.
+#### But there are *two* `waitUntilHeightAttested`, and they are not the same
+
+This is the subtle part, and picking the wrong one produces exactly the "retriable error"
+the SDK warns about:
+
+| Called on | Source of truth | Means |
+|---|---|---|
+| `chainInfoProvider` | the `0x0FD3` precompile — **on-chain** | Creditcoin has attested the block |
+| `proofBuilder` | the Proof Builder's `/api/v1/attested-height/{chainKey}` — **its in-memory cache** | the *service* can serve a proof for it |
+
+The SDK is explicit that the second "relies on the proof builder service's internal
+attestation cache, not directly on-chain data or precompiles," and that "there may be a
+delay between on-chain finalization and availability via this API."
+
+**The proof-builder one is the later of the two, and it is the one gating a proof request.**
+`offchain/src/worker.ts` currently uses it, which is correct. The on-chain check is still
+worth keeping as a log line — it tells you whether a stall is Creditcoin's attestation lag
+or the prover's indexing lag, and those page different people.
+
+There is also an `extraDelayMs` parameter, which exists "in case we request the proof from
+a different proof builder service due to load balancing." Set it. A load-balanced fleet
+means the instance that told you *attested* may not be the instance you ask for the proof.
+
+### 3 · Prove — resolved; the SDK *is* the mapping layer
+
+The earlier draft called for a spike here because two conflicting request shapes were
+documented and the response JSON was unknown. **Both are now settled**, and the answer is
+that riya should not talk to the prover over HTTP at all.
+
+**The request shape.** `research/notes.md` was right and the sequence diagram was an
+abstraction. The SDK's own docstring pins the endpoint:
+
+> *"Service is expected to expose an HTTP endpoint at
+> `/api/v1/proof-by-tx/{chainKey}/{transactionHash}`"*
+
+Two parameters, not three. `chainKey` is fixed in the `ProofBuilder` constructor, so the
+call site is just `getProof(txHash)` — the block height is derived by the service, which is
+why the path form never needed to carry it.
+
+**Which prover URL.** `https://prover.cc3-testnet.creditcoin.network` — the one the SDK's
+own examples and docstrings use throughout. `proof-gen-api` does not appear anywhere in the
+SDK. Treat the `environments.md` ambiguity as closed in favour of `prover`.
+
+**The response shape**, known exactly, as `ContinuityResponse`:
+
+```ts
+{ chainKey, headerNumber, txIndex, txHash, txBytes,
+  merkleProof:     { root, siblings: [{ hash, isLeft }] },
+  continuityProof: { lowerEndpointDigest, roots: string[] },
+  cached, generatedAt }
+```
+
+Compare that to what `RiyaASC.submit(height, encodedTx, merkleProof, continuityProof)`
+expects (checkpoint 6) and the mapping is `headerNumber → height`, `txBytes → encodedTx`,
+and the two proof structs pass straight through. **There is no mapping layer to write** —
+which is the whole reason the spike is cancelled rather than merely postponed.
+
+**`chainKey` should be discovered, not hardcoded.** `chainInfoProvider.getSupportedChains()`
+returns `{ chainKey, chainId, chainName, chainEncoding }`. Sepolia is `1` on Creditcoin
+Testnet, but asserting that at boot — fetch the list, find `chainId === 11155111`, and check
+it equals the `I_CHAIN_KEY` the deployed `RiyaASC` was constructed with — turns a silent
+misconfiguration into a startup crash. The registries differ per network, and a worker
+pointed at the wrong key builds proofs the ASC will reject.
+
+**On the WSS-only concern:** it was wrong, and it was load-bearing for the stack choice.
+The SDK's examples and riya's own `worker.ts` both use plain `JsonRpcProvider` against
+`https://rpc.cc3-testnet.creditcoin.network`. HTTP works. See **Layout and stack** below —
+this is what removes the last argument for viem.
 
 ### 4 · Check — `isConsumed`, and what the docs say about tracking
 
@@ -320,14 +388,29 @@ So: the ASC's `s_consumed` mapping is the guarantee, and the worker's own record
 efficiency layer. Do both. Checkpoint 6 added a public `isConsumed(bytes32 key)` view
 specifically so the worker can check on-chain without paying for a reverting transaction.
 
-Compute the key exactly as the contract does:
+Compute the key exactly as the contract does (`src/RiyaASC.sol:199`):
 
 ```
 txIndex = verifier.calculateTxIndex(merkleProof)
 key     = keccak256(abi.encode(chainKey, height, merkleProof.root, txIndex))
 ```
 
-Both are cheap reads. Call `isConsumed(key)` and skip if it is `true`.
+**The `txIndex` round-trip is now avoidable.** The prover already returns `txIndex` in its
+response, so the worker can compute the key with **zero on-chain calls** and only pay for
+the `isConsumed` read. Keep `computeTransactionIndex(merkleProof)` (the SDK's wrapper for
+the precompile's `calculateTxIndex`) in the test suite as the cross-check that the
+prover's `txIndex` and the precompile's derivation agree — but do not call it on the hot
+path.
+
+Two typing traps when reproducing `abi.encode` in TypeScript, both of which produce a key
+that is wrong-but-plausible and silently disable the dedupe:
+
+- `I_CHAIN_KEY` is `uint64` and `calculateTxIndex` returns `uint64` — **not** `uint256`.
+  Encode them as `uint64` or every key mismatches.
+- `height` is whatever `submit`'s parameter declares. Read the signature; do not assume.
+
+This is the mismatch the "do not skip this one" test in the **Tests** section exists to
+catch.
 
 ### 7 · Record — durable, per the docs
 
@@ -346,7 +429,28 @@ has no idea that event ever existed.
 
 So keep a small durable store keyed by `(txHash, logIndex)` with a status:
 `detected → attested → proved → submitted → confirmed`. SQLite or a JSON file is plenty
-at this scale. On restart:
+at this scale.
+
+> **Answering the `@question` in `offchain/src/worker.ts`** — *"should we then integrate a
+> database, preferably a postgres database?"*
+>
+> **No, not for this build.** Postgres is the right answer to concurrent writers, and riya
+> has exactly one writer by design — step 5 forbids a second. It is also the wrong answer to
+> the question the docs actually ask, which is about *surviving a restart*, not about
+> throughput or querying.
+>
+> Use SQLite. It is a file, it is transactional, it needs no process to babysit, and it
+> deploys wherever the worker deploys — which matters when Execution Capability is being
+> judged on a demo that has to come up on someone else's machine. A Postgres dependency is
+> one more container between the judges and a working demo, bought for scale riya does not
+> have.
+>
+> What would change the answer: multiple workers across regions (which step 5 rules out), or
+> wanting the store to double as the analytics/reporting surface for the frontend. If the
+> second one arrives, that is a read-replica of chain state, not this table — keep the
+> worker's crash-recovery store separate from it either way.
+
+On restart:
 
 1. Reload anything not `confirmed`, and resume it from its recorded stage.
 2. Rescan the source chain from the last `confirmed` block minus a margin.
@@ -382,13 +486,60 @@ So:
 - **One submission at a time.** A single ordered queue, sorted by
   `(blockNumber, transactionIndex)`, one transaction in flight.
 - **No parallelism, ever.** Concurrent submission is the whole bug. If throughput ever
-  becomes a real problem, the answer is the precompile's batch `verifyAndEmit` overload
-  (which takes arrays and one shared continuity proof), not two workers.
+  becomes a real problem, the answer is the precompile's batch overload, not two workers —
+  and the batch API turns out to *enforce* riya's ordering rather than threaten it (below).
 - **Ordering constrains the retry loops too.** A retry on event *n* must block event
   *n + 1*, not let it overtake. This is the one place where the docs' three independent
   retry loops need a riya-specific constraint bolted on.
 - Note that `_dispatch` already orders harvests before deposits *within* a single
   transaction, for the same reason. Across transactions it is the worker's job.
+
+#### Pre-flight: `verifySingle` costs nothing, so always call it
+
+`offchain/src/worker.ts` currently ends at `prover.verifySingle(...)`. That is **not** the
+submission — it is a read-only call to the `0x0FD2` precompile that returns a boolean, and
+riya's actual write is `RiyaASC.submit(...)`, which calls `verifyAndEmit` internally
+(`src/RiyaASC.sol:209`).
+
+That is worth keeping rather than replacing. It gives the worker a **free dry run**: a
+malformed or stale proof returns `false` for zero tCTC, instead of reverting a paid
+`submit`. The rule:
+
+```
+verifySingle(...) === false  →  do not submit; re-request the proof
+verifySingle(...) === true   →  submit, and expect it to land
+```
+
+Note the division of labour, because it is easy to over-read what the dry run proves. The
+precompile answers *"is this proof valid?"*. It says nothing about riya's own guards —
+`RiyaASC__NoRelevantLog` and `RiyaASC__TxReverted` can still fire on a proof that passes
+`verifySingle` perfectly, because those are checks on the *contents* of a transaction the
+precompile has already agreed is real. Pre-flight narrows the failure set; it does not
+empty it.
+
+#### The batch path, and its hard limits
+
+When throughput eventually matters, the constraints are fixed and small:
+
+> *"The current `MAX_BATCH_SIZE` is 10 proofs, and these must be within a
+> `MAX_BATCH_RANGE` of 1000 blocks."*
+
+`getBatchProof(txHashes)` returns **one shared `continuityProof`** for the whole span plus
+per-transaction merkle proofs — which is where the saving comes from, since the continuity
+proof is the part that scales with waiting (see **Cost**).
+
+**And the batch API is ordered by construction.** The SDK's `mergeProofs` is blunt about it:
+
+> *"This method expects the proofs to be in order from lowest to highest block number and
+> contiguous. Otherwise, the resulting proof will not be usable for proving."*
+
+Read that against step 5's whole argument. riya's ordering invariant is enforced nowhere in
+the contracts and is the worker's sole responsibility — but a worker that batches
+*cannot* get the order wrong, because an out-of-order batch fails to build at all. The
+optimisation and the correctness property point the same way, which is a rare and welcome
+alignment. It does not remove the need for the ordered queue (batches must still be
+submitted in ascending order relative to each other), but it removes the worst case where a
+performance change silently breaks accounting.
 
 ### 6 · Confirm — riya has a purpose-built event for this
 
@@ -412,6 +563,33 @@ consequence — and it is also the first thing you will want when something goes
 ---
 
 ## Retries: three loops, per the docs
+
+The official flowchart — now saved at [`worker-architecture.png`](../worker-architecture.png)
+— is the docs' *"logical flow that a more advanced oracle worker might use"*, and it
+confirms this section exactly. It has three retry edges and no others:
+
+```
+Monitor → Event detected → Wait for attestation ─┬─ Not yet attested → Retry after delay ─┐
+                                                 └─ Block attested                        │
+                          Generate proofs ───────┬─ Service error → Retry proof generation ┘
+                                                 └─ Proofs generated
+                          Call ASC contract ─────┬─ Network error → Retry ASC call
+                                                 └─ Transaction submitted
+                          ASC verifies synchronously → Business logic executed → Success!
+```
+
+**One thing to notice about the diagram: it has no failure terminal.** Every error edge
+loops back; the only exit is `Success!`. That is fine as a teaching diagram and wrong as an
+operational one — it is precisely the loop-that-never-drains described at the end of this
+section. riya's dead-lettering is a deliberate departure from the official flow, not an
+omission from it, and the submission should say so rather than quietly diverging.
+
+**Two of the three loops are already written for you.** `waitUntilHeightAttested` polls at
+15s and gives up at 15 minutes (both configurable), and the SDK ships
+`exponential-backoff` as a direct dependency. Do not hand-roll `retryAttestation`. Do tune
+that 15-minute ceiling against measured Creditcoin attestation cadence — it is a default
+chosen for a generic chain, and if riya's real lag ever exceeds it the worker will throw on
+a block that was going to be attested fine.
 
 The documentation's state machine has three distinct retry points, and they fail for
 different reasons and want different backoff:
@@ -465,21 +643,43 @@ offchain/
 └── src/
     ├── config.ts         shared: addresses, chainkey, RPCs, prover URL
     ├── abi.ts            generated from forge artifacts, not hand-typed
+    ├── store.ts          worker only: the durable record from step 7 (SQLite)
     ├── keeper.ts         Ethereum only
     └── worker.ts         Ethereum → Creditcoin
 ```
 
-**TypeScript + viem.** The frontend is already Next.js/TypeScript, so this shares a
-language and a wallet library with it, and viem's `webSocket()` transport is what the
-Creditcoin WSS-only endpoint needs.
+### Correction: ethers v6, not viem
+
+The earlier draft specified viem on two grounds — sharing a library with the Next.js
+frontend, and needing `webSocket()` for a WSS-only Creditcoin endpoint. **Both grounds have
+since failed**, and the second one was simply wrong:
+
+- `@gluwa/usc-sdk` declares **ethers v6 as a peer dependency**. Every SDK entry point takes
+  an ethers `JsonRpcApiProvider` or `Signer`. Using viem would mean writing an adapter
+  around the one library that is doing the hard part.
+- The WSS-only claim was mistaken. `https://rpc.cc3-testnet.creditcoin.network` is what the
+  SDK's own examples use, and it is what `worker.ts` already uses. There is no transport
+  problem to solve.
+
+So: **TypeScript + ethers v6 + `@gluwa/usc-sdk`** in `offchain/`. The frontend may keep
+whatever it uses; the shared-library argument was never worth much, since `config.ts` and
+generated ABIs are the only things that actually cross that boundary.
+
+This is a genuine win for Technical Alignment, not just convenience. The worker now depends
+on Creditcoin's own published SDK and calls two Creditcoin precompiles (`0x0FD2` and
+`0x0FD3`) through it. "Could this ship on any L2 unchanged?" is not a question this file
+invites.
 
 `config.ts` is shared; **nothing else is.** If `keeper.ts` ever needs to import from
 `worker.ts` or vice versa, the split has been drawn in the wrong place — go back and
-find out why.
+find out why. Note that only the worker takes the SDK dependency — the keeper is pure
+ethers against Ethereum, and adding an SDK import to it is the clearest possible signal
+that the split has been violated.
 
 Generate `abi.ts` from `out/*.json` rather than pasting ABIs. The event signatures are
 load-bearing on both sides of the gap (checkpoint 4), and a hand-copied ABI is one more
-place for them to drift.
+place for them to drift. This covers riya's *own* contracts only — the precompile
+interfaces come from the SDK, and should not be hand-written at all.
 
 ### Two keys, two `.env` entries
 
@@ -491,20 +691,37 @@ per `CLAUDE.md`, keep it that way.
 
 ## What is still unknown
 
-Honest inventory, because this is the least-specified component in the build:
+Adopting `@gluwa/usc-sdk` closed three of the five items that were open here. Kept with
+their original numbering so the change is legible:
 
-1. **The prover's response shape**, and whether the request takes two parameters or
-   three. Unverified. Blocking. Spike it first.
-2. **Which prover URL is correct** on testnet. Two are documented.
-3. **How to check attestation status** — the docs show the step, the precompile
-   interface does not obviously expose it.
-4. **Attestation cadence on Creditcoin Testnet** — 10 blocks or 100? Sets the worker's
-   minimum latency and therefore what the demo timeline looks like.
-5. **A testnet faucet** for tCTC. Undocumented on the environments page, and the worker
-   cannot submit anything without it.
+| # | Was | Now |
+|---|---|---|
+| 1 | Prover response shape; 2 params or 3? | **Resolved.** `ContinuityResponse`; two params, `/api/v1/proof-by-tx/{chainKey}/{txHash}` |
+| 2 | Which prover URL | **Resolved.** `https://prover.cc3-testnet.creditcoin.network` |
+| 3 | How to check attestation status | **Resolved.** ChainInfo precompile `0x0FD3`, via `waitUntilHeightAttested` |
+| 4 | Attestation cadence on testnet | **Still open**, but no longer blocking — see below |
+| 5 | A tCTC faucet | **Still open. The one remaining item that can stop the demo dead.** |
 
-Items 1 and 5 are the two that can stop the demo dead. Resolve them before writing
-structure, not after.
+**On #4.** The SDK's defaults — poll every 15s, time out at 15 minutes — bound the answer
+usefully: the authors expect attestation inside 15 minutes and consider 15s granularity
+sensible. That is enough to design the retry loop, so cadence is no longer blocking. It is
+still worth *measuring*, because it sets the demo's wall-clock gap between "user deposits on
+Sepolia" and "collateral appears on Creditcoin", and that gap is a thing judges watch happen
+in real time. Measure it once and script the demo narration around the real number.
+
+**On #5.** Unchanged and now isolated. Every other blocker on this checkpoint has been
+retired by the SDK; a worker that cannot pay for `submit()` is the only thing left between
+riya and a working vertical slice. Resolve it before writing more structure.
+
+New items the SDK surfaced, none blocking:
+
+6. **Does the Proof Builder require an API key or rate-limit anonymous callers?** The SDK
+   constructor takes only a URL and a timeout, which suggests not — but the demo makes a
+   burst of requests during catch-up, and discovering a rate limit live is a bad time.
+7. **`chainEncoding`.** `getSupportedChains()` returns it per chain and the SDK's encoding
+   helpers take it as a parameter. It is handled inside `getProof`, so it should never
+   surface — but if the prover ever returns `txBytes` the ASC rejects, this is the first
+   place to look.
 
 ---
 
@@ -534,6 +751,9 @@ Off-chain code, so these are ordinary unit tests, not Foundry:
 - **crash recovery:** a store containing a `submitted` record whose `ProofConsumed` was
   never seen → on restart, re-checks `isConsumed` rather than resubmitting blind
 - a permanent failure (`NoRelevantLog`) → dead-lettered, not retried forever
+- **pre-flight:** `verifySingle` returning `false` → no `submit` transaction is sent
+- **boot assertion:** `getSupportedChains()` disagreeing with the deployed `RiyaASC`'s
+  `I_CHAIN_KEY` → the worker refuses to start rather than building proofs the ASC rejects
 
 ---
 
