@@ -23,6 +23,7 @@
   },
   "homepage": "https://github.com/Kelechikizito/riya#readme",
   "dependencies": {
-    "@gluwa/usc-contracts": "^0.2.0"
+    "@gluwa/usc-contracts": "^0.2.0",
+    "@gluwa/usc-sdk": "^0.18.0"
   }
 }
