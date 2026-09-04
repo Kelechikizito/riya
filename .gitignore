@@ -18,3 +18,8 @@ docs/
 
 # Node modules
 node_modules/
+
+# Worker crash-recovery store (SQLite, regenerated on demand)
+*.db
+*.db-wal
+*.db-shm
