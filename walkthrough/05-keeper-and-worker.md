@@ -425,12 +425,32 @@ pay only for the `isConsumed` read. Keep the SDK's `computeTransactionIndex(merk
 your test suite as a check that the service's `txIndex` agrees with the precompile's, and
 leave it out of the code that runs every cycle.
 
-Two typing mistakes to avoid when rebuilding `abi.encode` in TypeScript, both of which
-produce a key that looks reasonable and quietly breaks the whole check:
+The types in `submit` are `uint64 height`, `bytes32 root` from the merkle proof, and a
+`uint64` chain key and transaction index.
 
-- `I_CHAIN_KEY` is a `uint64`, and `calculateTxIndex` returns a `uint64`, so encoding either
-  of them as `uint256` makes every key come out wrong.
-- `height` is whatever type `submit` declares, so read the signature rather than guessing.
+**The mistake that actually breaks this** is reaching for `solidityPacked` instead of
+`AbiCoder.defaultAbiCoder().encode`. Solidity's `abi.encode` pads every value out to a full
+32 bytes, while `abi.encodePacked` and its ethers equivalent squeeze values together at
+their natural width, so the two produce completely different hashes from identical inputs.
+The contract uses `abi.encode`, so your TypeScript has to as well.
+
+The widths themselves are more forgiving than they look. Because `abi.encode` pads a
+`uint64` out to 32 bytes anyway, writing `uint256` in the TypeScript type list produces
+byte-for-byte the same key. Writing `uint64` is still the better habit, since ethers then
+rejects any value too big to fit and you find a bad chain key or index at the moment it
+appears rather than several steps later.
+
+Here is a known-good example to test against, checked against Solidity with
+`cast keccak $(cast abi-encode ...)`:
+
+```
+chainKey = 1
+height   = 9123456
+root     = 0x1111111111111111111111111111111111111111111111111111111111111111
+txIndex  = 7
+
+key      = 0xd30497eb9a7e9a3d679a1bbaa0d822fed2d5eaabf13546e6b7082bc2f607fb42
+```
 
 The test marked "do not skip this one" in the **Tests** section exists to catch this.
 
