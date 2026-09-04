@@ -737,45 +737,76 @@ gitignored, per `CLAUDE.md`.
 
 ## Where `worker.ts` stands today
 
-The file currently holds one function, `proveTransaction(txHash)`, which covers steps 2, 3
-and part of 5. Measured against the seven steps:
+All seven steps are built, and `offchain/` is a runnable TypeScript package rather than a
+sketch. Measured against the seven steps:
 
-| Step | State | What is left |
+| Step | State | Where it lives |
 |---|---|---|
-| 1. monitor | not started | watch both events, filter by contract address, run two RPC providers |
-| 2. wait | **done** | add `extraDelayMs`, and log the on-chain check alongside it |
-| 3. prove | **done** | move the URL and chain key into `config.ts` |
-| 4. check | not started | build the key, call `isConsumed`, skip anything already applied |
-| 5. submit | half done | `verifySingle` works as the free trial run; the real `RiyaASC.submit` call and the ordered queue are both missing |
-| 6. confirm | not started | watch for `ProofConsumed` and match on your key |
-| 7. record | not started | the SQLite store and the restart logic |
+| 1. monitor | **done** | `Worker.scan` — both events, filtered by address, unioned across two RPC endpoints |
+| 2. wait | **done** | `Worker.processOne` — the Proof Builder's wait gates it, the `0x0FD3` bounds check runs alongside, `extraDelayMs` is set |
+| 3. prove | **done** | `Worker.processOne`, with `assertChainKey()` confirming the key at startup |
+| 4. check | **done** | `replayKey` + `isConsumed`, before any paid call |
+| 5. submit | **done** | `verifySingle` as the free trial run, then `submitProof`, drained by `Worker.drain` one at a time in Ethereum's order |
+| 6. confirm | **done** | `ProofConsumed` matched on the key, logged beside the Ethereum tx hash |
+| 7. record | **done** | `store.ts`, SQLite, statuses `detected → attested → proved → submitted → confirmed` |
 
-Three smaller things to fix in what is already written:
+The three smaller things flagged in the previous revision are fixed: `tx.blockNumber` is
+checked with a clear error for a mistyped or still-pending hash, and the chain key and
+Proof Builder URL both moved into `config.ts`.
 
-- `tx!.blockNumber!` assumes the transaction exists and has been mined. A hash that is
-  mistyped or still pending gives you a confusing crash, so check both and return a clear
-  error instead.
-- `chainKey` is hardcoded as `1`. Move it to `config.ts` and confirm it at startup against
-  `getSupportedChains()`, as described in step 3.
-- The Proof Builder URL is written inline. It belongs in `config.ts` next to the chain key.
+### The files
 
-### Suggested order to build the rest
+```
+offchain/
+├── package.json          ESM, TypeScript, ethers v6, @gluwa/usc-sdk
+├── tsconfig.json
+├── .env.example          every variable, documented; real values in the repo-root .env
+├── scripts/gen-abi.ts    generates src/abi.ts from Foundry's out/
+├── src/
+│   ├── config.ts         the only module both programs import
+│   ├── abi.ts            GENERATED — `npm run abi` after any contract change
+│   ├── store.ts          the SQLite crash-recovery store
+│   ├── keeper.ts         Ethereum only, no SDK import
+│   └── worker.ts         Ethereum to Creditcoin
+└── test/                 14 unit tests, `npm test`
+```
 
-1. **Get tCTC**, because nothing past step 5 can be tested without it. See the open
-   questions below.
-2. **Step 4 and the key derivation**, since it is self-contained and its test is the one
-   that catches a whole class of silent bugs.
-3. **Step 5, the real submit**, replacing the return value of `verifySingle` with an actual
-   `RiyaASC.submit` call while keeping `verifySingle` as the check before it.
-4. **Step 6**, which is short and gives you the log line the demo needs.
-5. **Step 1**, the event watcher, which turns the current one-shot function into something
-   that runs by itself.
-6. **Step 7**, the store, last, because it only matters once the worker runs long enough to
-   crash partway through.
-7. **The ordered queue** wrapped around steps 3 to 6, once each of them works on its own.
+Four commands:
 
-Steps 2 and 3 being the finished ones is a good sign, since they were the two that carried
-the unknowns.
+```
+npm run abi        regenerate src/abi.ts from out/
+npm run worker     run the worker
+npm run worker -- --once <txHash>    prove one transaction and exit (the demo path)
+npm run worker -- --dead             list dead-lettered events
+npm run keeper -- --once             one harvest cycle (the demo button)
+npm test           14 unit tests, no network needed
+npm run typecheck
+```
+
+### Two decisions worth recording
+
+**SQLite, not Postgres**, answering the `@question` that used to sit at the top of
+`worker.ts`. Postgres earns its keep when several programs write the same data at once, and
+riya has one writer on purpose because step 5 forbids a second. Node 24 ships `node:sqlite`
+in the standard library, so the store costs no dependency at all and no container stands
+between a judge and a running demo.
+
+**The retry policy diverges from Creditcoin's flowchart on purpose.** Their diagram has no
+failure exit — every error path loops back — which is a loop that can never drain.
+`RiyaASC__NoRelevantLog` and `RiyaASC__TxReverted` are permanent, so the worker dead-letters
+them rather than blocking every later event behind an event that will never succeed. The
+submission should say so rather than diverging quietly.
+
+### What is not covered
+
+The tests cover the pure logic: key derivation, ordering, crash recovery, resume points, and
+failure classification. The remaining cases from the **Tests** section below — the address
+filter, `isConsumed` suppressing a submit, `verifySingle` returning false, the startup chain
+key check — need either a live Creditcoin connection or a mocking layer, and they are
+checkpoint 9's work.
+
+**Nothing past step 4 has run against a live `RiyaASC`,** because none is deployed yet. That
+is open question 5 and it has not moved.
 
 ---
 
