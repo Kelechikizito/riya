@@ -18,11 +18,52 @@
 // Following multiple source chain nodes to listen for events in case a node experiences issues
 // Retrying failed proof generation or ASC calls in case they fail. A call can fail for many reasons: for example, the Proof Builder services might be experiencing downtime or connectivity issues, or the ASC contract call might fail due to network issues
 
-import { JsonRpcProvider } from "ethers";
-import { chainInfo, blockProver, proofProvider } from "@gluwa/usc-sdk";
+import { AbiCoder, Contract, JsonRpcProvider, keccak256 } from "ethers";
+import { chainInfo, blockProver, proofProvider, utils } from "@gluwa/usc-sdk";
 import "dotenv/config";
 
-async function proveTransaction(txHash: string) {
+const RIYA_ASC_ABI = ["function isConsumed(bytes32 key) view returns (bool)"];
+
+/**
+ * What proveTransaction concluded.
+ *
+ * The ordered queue needs these three kept apart: "skipped" is work already finished,
+ * while "invalid" means the proof was bad and should be requested again. Collapsing them
+ * into a boolean turns finished work into an endless retry.
+ */
+type ProveOutcome =
+  | { status: "skipped"; key: string }
+  | { status: "verified"; key: string }
+  | { status: "invalid"; key: string };
+
+/**
+ * Rebuilds the replay key exactly as `RiyaASC.submit` does at src/RiyaASC.sol:199.
+ *
+ * Must use `defaultAbiCoder` because the contract uses `abi.encode`, which pads every
+ * value to 32 bytes. `solidityPacked` is the equivalent of `abi.encodePacked` and packs
+ * values at their natural width, so it hashes to something completely different from the
+ * same inputs. A wrong key here fails silently: `isConsumed` simply always answers no,
+ * and the worker re-pays for work it already did on every restart.
+ *
+ * Known-good vector, cross-checked against `cast keccak $(cast abi-encode ...)`:
+ *   (1, 9123456, 0x11..11, 7)
+ *     -> 0xd30497eb9a7e9a3d679a1bbaa0d822fed2d5eaabf13546e6b7082bc2f607fb42
+ */
+export function replayKey(
+  chainKey: number,
+  height: number,
+  merkleRoot: string,
+  txIndex: number,
+): string {
+  return keccak256(
+    AbiCoder.defaultAbiCoder().encode(
+      ["uint64", "uint64", "bytes32", "uint64"],
+      [chainKey, height, merkleRoot, txIndex],
+    ),
+  );
+}
+
+async function proveTransaction(txHash: string): Promise<ProveOutcome> {
   //  STEP 1: RESOLVE CHAIN KEY
   const chainKey = 1; // Ethereum Sepolia on CC3 Testnet
 
@@ -55,10 +96,27 @@ async function proveTransaction(txHash: string) {
   const {
     chainKey: ck,
     headerNumber,
+    txIndex,
     txBytes,
     merkleProof,
     continuityProof,
   } = result.data;
+
+  // STEP 4.5: SKIP ANYTHING THE ASC HAS ALREADY APPLIED
+  // The Proof Builder hands back txIndex, so the key costs no on-chain call. Ask before
+  // verifying: both are free reads, and a used key makes everything below it pointless.
+  const key = replayKey(ck, headerNumber, merkleProof.root, txIndex);
+
+  const asc = new Contract(
+    utils.env.getEnv("RIYA_ASC_ADDRESS"),
+    RIYA_ASC_ABI,
+    creditcoinProvider,
+  );
+
+  if (await asc.isConsumed(key)) {
+    console.log(`Skipping ${txHash}, already applied as ${key}`);
+    return { status: "skipped", key };
+  }
 
   // STEP 5: VERIFY ON-CHAIN
   const verified = await prover.verifySingle(
@@ -68,7 +126,11 @@ async function proveTransaction(txHash: string) {
     merkleProof,
     continuityProof,
   );
-  console.log("Proof verification:", verified ? "SUCCESS" : "FAILED");
+  if (!verified) {
+    console.log(`Proof verification FAILED for ${txHash}`);
+    return { status: "invalid", key };
+  }
 
-  return verified;
+  console.log(`Proof verification SUCCESS for ${txHash}, key ${key}`);
+  return { status: "verified", key };
 }
