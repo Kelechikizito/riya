@@ -1,4 +1,73 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-contract LoanLedger {}
+// import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+// import {
+//     SafeERC20
+// } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {RiyaUSD} from "src/destination-chain/RiyaUSD.sol";
+import {RiyaASC} from "src/destination-chain/RiyaASC.sol";
+import {
+    ReentrancyGuard
+} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+contract LoanLedger is ReentrancyGuard {
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+    error LoanLedger__NotASCContract();
+    error LoanLedger__ZeroAddress();
+
+    /*//////////////////////////////////////////////////////////////
+                           TYPE DECLARATIONS
+    //////////////////////////////////////////////////////////////*/
+    // using SafeERC20 for IERC20;
+
+    /*//////////////////////////////////////////////////////////////
+                            STATE VARIABLES
+    //////////////////////////////////////////////////////////////*/
+    address public immutable I_ASC;
+
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    /*//////////////////////////////////////////////////////////////
+                               MODIFIERS
+    //////////////////////////////////////////////////////////////*/
+    modifier onlyASC() {
+        if (msg.sender != I_ASC) revert LoanLedger__NotASCContract();
+        _;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+    constructor(address ascContract) {
+        if (ascContract == address(0)) revert LoanLedger__ZeroAddress();
+
+        I_ASC = ascContract;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           EXTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+    function onDeposit(address user, uint256 assets) external onlyASC {
+
+    }
+
+    function onHarvest(uint256 gross) external onlyASC {}
+
+    function borrow(uint256 amount) external {}
+
+    function repay(uint256 amoount) external {
+
+    }
+    /*//////////////////////////////////////////////////////////////
+                           INTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /*//////////////////////////////////////////////////////////////
+                      EXTERNAL VIEW/PURE FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+}
