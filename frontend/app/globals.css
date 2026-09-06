@@ -1,26 +1,172 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Tailwind's automatic source detection skips anything git-ignores, which once
+   silently dropped every class used only under app/docs/. Registering the two
+   source trees explicitly makes class generation independent of .gitignore. */
+@source "../app";
+@source "../components";
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ============================================================================
+   riya design tokens
+   Source of truth: docs/brand-guidelines.md
+   Teal is Ethereum and yield. Amber is Creditcoin and credit. The colours are
+   semantic, not decorative — never swap them.
+   ========================================================================= */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@theme {
+  /* --- Ethereum / yield side -------------------------------------------- */
+  --color-yield-50: #ecfffb;
+  --color-yield-100: #cffdf2;
+  --color-yield-200: #a5f8e7;
+  --color-yield-300: #5eead4;
+  --color-yield-400: #2dd4bf;
+  --color-yield-500: #14b8a6;
+  --color-yield-600: #0d9488;
+  --color-harvest: #34d399;
+
+  /* --- Creditcoin / credit side ----------------------------------------- */
+  --color-credit-100: #fef3c7;
+  --color-credit-200: #fde68a;
+  --color-credit-300: #fcd34d;
+  --color-credit-400: #fbbf24;
+  --color-credit-500: #f59e0b;
+  --color-credit-600: #d97706;
+
+  /* --- Neutrals ---------------------------------------------------------- */
+  --color-void: #05090b;
+  --color-surface: #0c1416;
+  --color-raised: #131f22;
+  --color-line: #1e2e31;
+  --color-line-soft: #162225;
+  --color-ink: #e7f0ee;
+  --color-muted: #8b9e9b;
+  --color-faint: #788c89;
+
+  /* --- Semantic ---------------------------------------------------------- */
+  --color-danger: #f87171;
+
+  /* --- Typography -------------------------------------------------------- */
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+
+  /* --- Motion ------------------------------------------------------------ */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* --- Animation --------------------------------------------------------- */
+  --animate-drift: drift 22s ease-in-out infinite alternate;
+  --animate-pulse-soft: pulse-soft 3.2s ease-in-out infinite;
+  --animate-dash: dash 2.6s linear infinite;
+
+  @keyframes drift {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to   { transform: translate3d(4%, -6%, 0) scale(1.18); }
+  }
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 0.35; }
+    50%      { opacity: 1; }
+  }
+  @keyframes dash {
+    to { stroke-dashoffset: -28; }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ============================================================================
+   Base
+   ========================================================================= */
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    /* Nav is 64px; keep anchored sections clear of it. */
+    scroll-padding-top: 5.5rem;
+  }
+
+  body {
+    background-color: var(--color-void);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Money is mono, and mono numbers are tabular so columns line up. */
+  code, kbd, samp, pre, .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background-color: var(--color-yield-300);
+    color: var(--color-void);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-yield-300);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* Firefox / fallback scrollbar colouring */
+  * {
+    scrollbar-color: var(--color-line) transparent;
+  }
+}
+
+@layer components {
+  /* The eyebrow label above every section heading. */
+  .eyebrow {
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  /* Hairline card used everywhere. Slight top-light gradient reads as "raised"
+     without a drop shadow, which never looks right on near-black. */
+  .card {
+    border: 1px solid var(--color-line);
+    border-radius: 1rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.028), transparent 55%),
+      var(--color-surface);
+  }
+
+  /* Text that spans the two chains — teal resolving into amber. */
+  .duotone-text {
+    background: linear-gradient(100deg, #5eead4 0%, #a5f8e7 34%, #fcd34d 72%, #fbbf24 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Faint engineering grid, masked so it fades before the section edge. */
+  .grid-field {
+    background-image:
+      linear-gradient(var(--color-line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-line-soft) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 20%, transparent 78%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
