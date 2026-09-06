@@ -1,0 +1,91 @@
+{
+  "brand": "ClaudeKit Marketing - Primary",
+  "primitive": {
+    "color": {
+      "primary": {
+        "50": {
+          "$value": "#FFFFFF",
+          "$type": "color"
+        },
+        "100": {
+          "$value": "#FFFFFF",
+          "$type": "color"
+        },
+        "200": {
+          "$value": "#F7FFFF",
+          "$type": "color"
+        },
+        "300": {
+          "$value": "#C4FFFF",
+          "$type": "color"
+        },
+        "400": {
+          "$value": "#91FFFF",
+          "$type": "color"
+        },
+        "500": {
+          "$value": "#5EEAD4",
+          "$type": "color"
+        },
+        "600": {
+          "$value": "#38C4AE",
+          "$type": "color"
+        },
+        "700": {
+          "$value": "#129E88",
+          "$type": "color"
+        },
+        "800": {
+          "$value": "#007761",
+          "$type": "color"
+        },
+        "900": {
+          "$value": "#00513B",
+          "$type": "color"
+        }
+      },
+      "secondary": {
+        "50": {
+          "$value": "#FFFFFF",
+          "$type": "color"
+        },
+        "100": {
+          "$value": "#FFFFF0",
+          "$type": "color"
+        },
+        "200": {
+          "$value": "#FFFFBD",
+          "$type": "color"
+        },
+        "300": {
+          "$value": "#FFFF8A",
+          "$type": "color"
+        },
+        "400": {
+          "$value": "#FFF257",
+          "$type": "color"
+        },
+        "500": {
+          "$value": "#FBBF24",
+          "$type": "color"
+        },
+        "600": {
+          "$value": "#D59900",
+          "$type": "color"
+        },
+        "700": {
+          "$value": "#AF7300",
+          "$type": "color"
+        },
+        "800": {
+          "$value": "#884C00",
+          "$type": "color"
+        },
+        "900": {
+          "$value": "#622600",
+          "$type": "color"
+        }
+      }
+    }
+  }
+}
