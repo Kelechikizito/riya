@@ -39,6 +39,12 @@ const WANTED: Record<string, { exportAs: string; fragments: string[] }> = {
     exportAs: "AAVE_V4_ADAPTER_ABI",
     fragments: ["TokensHarvested", "yieldAccrued", "harvest", "I_MIN_HARVEST"],
   },
+  LoanLedger: {
+    exportAs: "LOAN_LEDGER_ABI",
+    // The ledger reverts inside `submit`, so its errors surface as a failed ASC call. The
+    // worker needs them decodable to tell a permanently doomed harvest from a retriable one.
+    fragments: ["LoanLedger__NoCollateral"],
+  },
 };
 
 type Fragment = { type: string; name?: string };

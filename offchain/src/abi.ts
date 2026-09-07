@@ -244,3 +244,11 @@ export const AAVE_V4_ADAPTER_ABI = [
     "anonymous": false
   }
 ] as const;
+
+export const LOAN_LEDGER_ABI = [
+  {
+    "type": "error",
+    "name": "LoanLedger__NoCollateral",
+    "inputs": []
+  }
+] as const;

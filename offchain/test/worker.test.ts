@@ -72,6 +72,13 @@ test("NoRelevantLog and TxReverted are permanent, so they get dead-lettered", ()
   );
 });
 
+test("a harvest that finds no collateral is permanent, not retriable", () => {
+  // The ledger raises this one, not the ASC, so it arrives as raw revert data that only
+  // decodes if `LOAN_LEDGER_ABI` is in the error interface. Selector for
+  // `LoanLedger__NoCollateral()`, cross-checked with `cast sig`.
+  assert.equal(permanentError({ data: "0xada12bbd" }), "LoanLedger__NoCollateral");
+});
+
 test("network failures and AlreadyConsumed stay retriable", () => {
   // A timeout may well have landed on-chain; the retry loop re-checks `isConsumed` rather
   // than giving up, and that check is what stops a hiccup costing a duplicate submission.

@@ -29,7 +29,12 @@ import {
 import { backOff } from "exponential-backoff";
 import { blockProver, chainInfo, proofProvider } from "@gluwa/usc-sdk";
 
-import { AAVE_V4_ADAPTER_ABI, RIYA_ASC_ABI, RIYA_ESCROW_ABI } from "./abi.js";
+import {
+  AAVE_V4_ADAPTER_ABI,
+  LOAN_LEDGER_ABI,
+  RIYA_ASC_ABI,
+  RIYA_ESCROW_ABI,
+} from "./abi.js";
 import * as config from "./config.js";
 import { WorkerStore, type EventRecord } from "./store.js";
 
@@ -72,6 +77,12 @@ const escrowInterface = new Interface(RIYA_ESCROW_ABI);
 const adapterInterface = new Interface(AAVE_V4_ADAPTER_ABI);
 const ascInterface = new Interface(RIYA_ASC_ABI);
 
+/**
+ * Reverts are decoded against the ASC *and* the ledger, because `submit` calls straight
+ * into `LoanLedger` and a revert raised down there bubbles up as the ASC call failing.
+ */
+const errorInterface = new Interface([...RIYA_ASC_ABI, ...LOAN_LEDGER_ABI]);
+
 /** Topics come from the generated ABI so they cannot drift from the deployed contracts. */
 const DEPOSIT_TOPIC = escrowInterface.getEvent(
   "TokensDepositedConfirmedByEscrow",
@@ -82,11 +93,18 @@ const PROOF_CONSUMED_TOPIC = ascInterface.getEvent("ProofConsumed")!.topicHash;
 /**
  * Failures that will never succeed however many times they are retried.
  *
- * Both look at *what the transaction contained* rather than at whether it happened, so a
- * proof that passes `verifySingle` perfectly can still hit them. Retrying these forever
- * just fills the queue and blocks every later event behind them, so they are dead-lettered.
+ * The first two look at *what the transaction contained* rather than at whether it happened,
+ * so a proof that passes `verifySingle` perfectly can still hit them. The third comes from
+ * the ledger: a harvest lands with `s_totalCollateral == 0`, which only happens when the
+ * deposit proof ahead of it was dead-lettered, and no later block puts that deposit back.
+ * Retrying any of these forever just fills the queue and blocks every later event behind
+ * them, so they are dead-lettered.
  */
-const PERMANENT_ERRORS = new Set(["RiyaASC__NoRelevantLog", "RiyaASC__TxReverted"]);
+const PERMANENT_ERRORS = new Set([
+  "RiyaASC__NoRelevantLog",
+  "RiyaASC__TxReverted",
+  "LoanLedger__NoCollateral",
+]);
 
 /** What `processOne` concluded, which decides whether the queue may advance. */
 type StepOutcome =
@@ -641,7 +659,7 @@ export function permanentError(error: unknown): string | null {
   const data = (error as { data?: string })?.data;
   if (typeof data === "string" && data.length >= 10) {
     try {
-      const parsed = ascInterface.parseError(data);
+      const parsed = errorInterface.parseError(data);
       if (parsed !== null && PERMANENT_ERRORS.has(parsed.name)) return parsed.name;
     } catch {
       // Not one of ours; treat as retriable.
