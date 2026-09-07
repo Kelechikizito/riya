@@ -6,6 +6,7 @@ import {
     NativeQueryVerifierLib
 } from "@gluwa/usc-contracts/contracts/write-ability/common/INativeQueryVerifier.sol";
 
+/// @dev IRiyaASC is the interface for the RiyaASC contract.
 interface IRiyaASC {
     function submit(
         uint64 height,
