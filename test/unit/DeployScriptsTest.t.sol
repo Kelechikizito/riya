@@ -46,8 +46,8 @@ contract DeployScriptsTest is Test {
     /// @dev The Chain Info Precompile. Same address on every Creditcoin network.
     address constant CHAIN_INFO = 0x0000000000000000000000000000000000000fD3;
 
-    uint256 deployerKey = 0xA11CE;
-    address deployer = vm.addr(0xA11CE);
+    uint256 deployerKey = SharedEnv.DEPLOYER_KEY;
+    address deployer = vm.addr(SharedEnv.DEPLOYER_KEY);
 
     /// @dev From `SharedEnv`, not `makeAddr`. `vm.setEnv` is process-global and test
     ///      contracts run in parallel, so two suites writing different values to

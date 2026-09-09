@@ -22,4 +22,8 @@ library SharedEnv {
 
     /// @dev `AaveV4Adapter` on Ethereum.
     address internal constant ADAPTER = 0x0000000000000000000000000000000000ada97e;
+
+    /// @dev Written to `PRIVATE_KEY` by every suite that runs a deploy script, for the same
+    ///      reason the addresses are shared.
+    uint256 internal constant DEPLOYER_KEY = 0xA11CE;
 }
