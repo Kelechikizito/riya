@@ -16,5 +16,6 @@ bypass_prevrandao = true
 [rpc_endpoints]
 mainnet_eth = "${ETH_MAINNET_RPC_URL}"
 sepolia_eth = "${ETH_SEPOLIA_RPC_URL}"
+creditcoin_testnet = "${CREDITCOIN_RPC_URL}"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
