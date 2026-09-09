@@ -11,10 +11,17 @@ import {IYieldAdapter} from "src/interfaces/IYieldAdapter.sol";
 /**
  * @title AaveV4Adapter
  * @author Kelechi Kizito Ugwu
- * @notice Parks the source-chain escrow's deposits in a single Aave V4 reserve and harvests the yield they earn back out to the escrow.
- * @dev Lives on Ethereum (Sepolia for the demo). Aave V4 replaces the V3 `Pool` with a `Spoke` that routes to a liquidity `Hub`; a reserve is addressed by a numeric `reserveId` rather than by the underlying's address, so the id is fixed at construction and the underlying is read back from the Spoke.
- *  This contract deliberately holds no idle balance. Every asset it receives is supplied immediately, and every asset it withdraws leaves in the same call. That is what lets `harvest` satisfy the protocol's "real money has to arrive" rule: the yield is moved to the escrow before anything is proven on Creditcoin, so the proof and the value travel together.
- * This adapter takes the escrow's money and parks it in Aave V4 to earn interest. Over time, the amount Aave reports it's holding grows past what was originally deposited (s_principal) — that growth is yield. harvest() is the function that skims off just that yield and sends it back to the escrow, leaving the original principal still earning interest in Aave.
+ * @notice Parks the escrow's deposits in a single Aave V4 reserve and harvests the yield
+ *         back out to the escrow.
+ * @dev Aave V4 replaces the V3 `Pool` with a `Spoke` that routes to a liquidity `Hub`, and
+ *      addresses a reserve by numeric id rather than by the underlying's address. The id is
+ *      fixed at construction and the underlying is read back from the Spoke.
+ *
+ *      Holds no idle balance: everything received is supplied in the same call, everything
+ *      withdrawn leaves in the same call. That is what lets `harvest` satisfy riya's rule
+ *      that the yield reaches the escrow before anything is proven on Creditcoin.
+ *
+ *      Whatever Aave reports above `s_principal` is yield, and `harvest` skims exactly that.
  */
 contract AaveV4Adapter is IYieldAdapter, ReentrancyGuard {
     /*//////////////////////////////////////////////////////////////
@@ -49,8 +56,7 @@ contract AaveV4Adapter is IYieldAdapter, ReentrancyGuard {
 
     /// @notice Smallest harvest worth paying Ethereum gas for, in `I_ASSET` units.
     /// @dev Batches dust into occasional meaningful harvests. Mainnet gas is the real
-    ///      constraint here and the only lever is harvesting less often in bigger
-    ///      batches, so this is sized per deployment rather than hardcoded.
+    ///      constraint and batching is the only lever, so this is sized per deployment.
     uint256 public immutable I_MIN_HARVEST;
 
     /// @notice Assets supplied on the escrow's behalf that are principal, not yield.
@@ -67,10 +73,9 @@ contract AaveV4Adapter is IYieldAdapter, ReentrancyGuard {
     /// @notice Emitted when principal is pulled back out of Aave for the escrow.
     event TokensWithdrawn(address indexed to, uint256 indexed assets, uint256 indexed shares);
 
-    /// @notice Emitted once harvested yield has actually landed in the escrow.
-    /// @dev This is the source-chain event the watcher bot proves to the ASC. It is
-    ///      emitted after the transfer, so its presence in a successful transaction
-    ///      means the money moved.
+    /// @notice Emitted once harvested yield has landed in the escrow.
+    /// @dev The source-chain event the worker proves. Emitted after the transfer, so its
+    ///      presence in a successful transaction means the money moved.
     event TokensHarvested(address indexed caller, uint256 indexed assets);
 
     /*//////////////////////////////////////////////////////////////
@@ -114,10 +119,11 @@ contract AaveV4Adapter is IYieldAdapter, ReentrancyGuard {
 
     /**
      * @notice Withdraws principal from Aave and sends it to `to`.
-     *  @dev Aave treats an amount above the maximum withdrawable as a full withdrawal, so passing `type(uint256).max` exits the whole position, yield included.
      * @param amount The amount of underlying to withdraw.
-     * @param to The recipient of the TokensWithdrawn assets.
-     * @return assets The amount actually TokensWithdrawn.
+     * @param to The recipient.
+     * @return assets The amount actually withdrawn.
+     * @dev Aave treats an amount above the maximum withdrawable as a full exit, so
+     *      `type(uint256).max` closes the whole position, yield included.
      */
     function withdraw(uint256 amount, address to) external nonReentrant onlyEscrow returns (uint256 assets) {
         return assets = _withdraw(amount, to);
@@ -125,14 +131,14 @@ contract AaveV4Adapter is IYieldAdapter, ReentrancyGuard {
 
     /**
      * @notice Moves everything Aave holds above principal into the escrow.
-     * @dev Permissionless — anyone may pay the gas to retire someone else's debt, and the yield can only ever go to the escrow. The `I_MIN_HARVEST` floor stops the
      * @return assets The amount of yield delivered to the escrow.
+     * @dev Permissionless: anyone may pay the gas to retire someone else's debt, and the
+     *      yield can only ever go to the escrow. The keeper calls this on a schedule; the
+     *      `I_MIN_HARVEST` floor is what stops it burning gas on dust.
      */
     function harvest() external nonReentrant returns (uint256 assets) {
         return assets = _harvest();
     }
-    // @question: who calls the harvest function to trigger the event, i would assume the readabiluty worker, righttt? Thta means we have to write code so the readability worker checks the event at how many intervals, who pays for the gas? The job of the readability worker in CTC is to pick up events, c'est fini.
-    // @question: how does this adapter contract track for multiple users? // @answer: Notice the contract never holds an idle balance — every token it receives goes straight into Aave in the same transaction. That's mentioned explicitly in the contract's top comment as a deliberate design choice.
 
     /*//////////////////////////////////////////////////////////////
                            INTERNAL FUNCTIONS
@@ -147,10 +153,11 @@ contract AaveV4Adapter is IYieldAdapter, ReentrancyGuard {
         I_ASSET.forceApprove(address(I_SPOKE), amount);
 
         // INTERACTIONS
+        // `assets` is what Aave confirmed, which can differ from `amount`. Principal
+        // tracks the confirmed figure, because that is what `yieldAccrued` measures against.
         uint256 shares;
         (shares, assets) = I_SPOKE.supply(I_RESERVE_ID, amount, address(this));
         s_principal += assets;
-        // @question: why did we define shares and not assets?
 
         emit TokensDepositedConfirmedByAdapter(assets, shares);
     }
@@ -177,18 +184,15 @@ contract AaveV4Adapter is IYieldAdapter, ReentrancyGuard {
 
     function _harvest() internal returns (uint256 assets) {
         // CHECKS
-        // 1. Check how much yield exists.
         uint256 availableYield = yieldAccrued();
-        // 2. Enforce a minimum.
         if (availableYield < I_MIN_HARVEST) revert AaveV4Adapter__HarvestBelowMinimum(availableYield, I_MIN_HARVEST);
 
-        // EFFECTS
         // INTERACTIONS
-        // 3. Withdraw just the yield from Aave.
+        // Withdraws the yield only, leaving principal earning.
         (, assets) = I_SPOKE.withdraw(I_RESERVE_ID, availableYield, address(this));
-        // 4. Send it to the escrow.
         I_ASSET.safeTransfer(I_ESCROW, assets);
 
+        // After the transfer, so the event means the money moved.
         emit TokensHarvested(msg.sender, assets);
     }
 
@@ -202,17 +206,15 @@ contract AaveV4Adapter is IYieldAdapter, ReentrancyGuard {
         return address(I_ASSET);
     }
 
-    /**
-     * @notice The adapter's current supplied balance in the reserve, principal plus yield.
-     * @return The total supplied assets for this contract
-     */
+    /// @notice The adapter's supplied balance in the reserve, principal plus yield.
     function totalAssets() public view returns (uint256) {
         return I_SPOKE.getUserSuppliedAssets(I_RESERVE_ID, address(this));
     }
 
     /**
      * @notice Yield earned but not yet harvested.
-     * @dev Clamped at zero: a reserve carrying a deficit can in        principle report less than principal, and that is not a negative harvest.
+     * @dev Clamped at zero, because a reserve carrying a deficit can report less than
+     *      principal and that is not a negative harvest.
      */
     function yieldAccrued() public view returns (uint256) {
         uint256 total = totalAssets();

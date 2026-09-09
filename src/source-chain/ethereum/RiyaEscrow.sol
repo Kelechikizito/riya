@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IYieldAdapter} from "src/interfaces/IYieldAdapter.sol";
-// import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+import {IYieldAdapter} from "src/interfaces/IYieldAdapter.sol";
 
 /**
  * @title RiyaEscrow
  * @author Kelechi Kizito Ugwu
- * @notice
+ * @notice Custody for riya's source-chain deposits. Takes the user's asset, forwards it to
+ *         the adapter, and emits the event the readability worker proves on Creditcoin.
+ * @dev Holds no balance between calls. Every deposit is forwarded in the same transaction,
+ *      so the escrow's own balance is only ever harvested yield awaiting its proof.
  */
 contract RiyaEscrow {
     /*//////////////////////////////////////////////////////////////
@@ -25,30 +26,31 @@ contract RiyaEscrow {
                             TYPE DECLARATIONS
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @dev The SafeERC20 library is used to safely handle ERC20 operations to prevent issues with non-standard ERC20 tokens, for example, USDT.
-     * @notice This means for every IERC20 token, we can now call the safeTransfer, safeTransferFrom, and safeApprove functions provided by the SafeERC20 library.
-     */
+    /// @dev Non-standard ERC-20s such as USDT do not return a bool, so every transfer here
+    ///      goes through SafeERC20.
     using SafeERC20 for IERC20;
 
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
+    /// @notice The deposit asset, read from the adapter so there is no second copy to
+    ///         disagree with.
     IERC20 public immutable I_ASSET;
+
     IYieldAdapter public immutable I_ADAPTER;
-    uint256 public immutable I_MIN_DEPOSIT; // @question: what's the essence of this state variable
+
+    /// @notice Smallest deposit worth a Creditcoin proof. Guards the worker's CTC, since
+    ///         every deposit costs the same to prove whatever its size.
+    uint256 public immutable I_MIN_DEPOSIT;
 
     /*///////////////////////////////////////////////////////////////////////
                                  EVENTS
     ////////////////////////////////////////////////////////////////////////*/
 
     /// @notice The event the readability worker proves to the ASC on Creditcoin.
-    /// @dev The only event in the system that pairs a user with an amount, and the
-    ///      figure carried here becomes their collateral on Creditcoin.
-    event TokensDepositedConfirmedByEscrow(
-        address indexed user,
-        uint256 indexed assets
-    );
+    /// @dev The only event pairing a user with an amount. This figure becomes their
+    ///      collateral on Creditcoin.
+    event TokensDepositedConfirmedByEscrow(address indexed user, uint256 indexed assets);
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -64,10 +66,8 @@ contract RiyaEscrow {
 
         // EFFECTS
         I_ADAPTER = IYieldAdapter(aaveAdapterAddress);
-        I_ASSET = IERC20(IYieldAdapter(aaveAdapterAddress).asset()); // @audit
+        I_ASSET = IERC20(IYieldAdapter(aaveAdapterAddress).asset());
         I_MIN_DEPOSIT = minDeposit;
-
-        // INTERACTIONS
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -90,17 +90,13 @@ contract RiyaEscrow {
         }
 
         // INTERACTIONS
-        /// @notice This step transfers the tokens from the user to this escrow address
         I_ASSET.safeTransferFrom(msg.sender, address(this), amount);
-
-        /// @notice This step approves the adapter contract to pull tokens from this escrow contract.
         I_ASSET.forceApprove(address(I_ADAPTER), amount);
 
-        /// @notice escrow → adapter → Aave. Your funds(tokens/assets) deposited on aaave
+        // escrow -> adapter -> Aave, all in this transaction.
         uint256 assets = I_ADAPTER.deposit(amount);
 
-        // EFFECTS
-
-        emit TokensDepositedConfirmedByEscrow(msg.sender, assets); // @question: wh't the point of the event if the adapter will stilo emeit one?
+        // Emits `assets` as Aave confirmed it, not `amount` as requested.
+        emit TokensDepositedConfirmedByEscrow(msg.sender, assets);
     }
 }
