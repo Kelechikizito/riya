@@ -18,7 +18,7 @@ export function Hero() {
         <div className="max-w-3xl">
           <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface/60 px-3 py-1.5 text-xs text-muted backdrop-blur">
             <span className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-yield-300" />
-            Built on Creditcoin · Attestcoin readability
+            Built on Creditcoin with Attestcoin readability
           </span>
 
           <h1 className="mt-7 text-[2.5rem] font-semibold leading-[1.02] tracking-[-0.03em] sm:text-[4rem] lg:text-[4.75rem]">
