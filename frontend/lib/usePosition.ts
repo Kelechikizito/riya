@@ -13,6 +13,12 @@ import { DEMO_POSITION } from "./demo";
 export type Position = {
   collateral: bigint;
   debt: bigint;
+  /**
+   * Proven yield not yet applied. Settlement is lazy, so between a harvest landing
+   * and the user next touching their position, `debt` reads stale by this much.
+   * Showing it is what makes a proof visibly do something.
+   */
+  pendingYield: bigint;
   repaidByYield: bigint;
   credit: bigint;
   score: bigint;
@@ -20,6 +26,13 @@ export type Position = {
   selfRepayRateBps: bigint;
   rUsdBalance: bigint;
 };
+
+/** Debt after applying anything already proven. What the user actually owes. */
+export function effectiveDebt(position: Position): bigint {
+  return position.pendingYield >= position.debt
+    ? 0n
+    : position.debt - position.pendingYield;
+}
 
 export type PositionState = {
   position: Position;
@@ -51,6 +64,7 @@ export function usePosition(): PositionState {
       { ...ledgerContract, functionName: "s_debt", args: [address!] },
       { ...ledgerContract, functionName: "s_repaidByYield", args: [address!] },
       { ...ledgerContract, functionName: "s_credit", args: [address!] },
+      { ...ledgerContract, functionName: "pendingYield", args: [address!] },
       { ...ledgerContract, functionName: "score", args: [address!] },
       { ...ledgerContract, functionName: "maxLtvBps", args: [address!] },
       {
@@ -59,7 +73,7 @@ export function usePosition(): PositionState {
         args: [address!, BigInt(ASSUMED_YIELD_RATE_BPS)],
       },
     ],
-    query: { enabled, refetchInterval: 15_000 },
+    query: { enabled, refetchInterval: 10_000 },
   });
 
   // rUSD is a separate contract with a separate ABI, so it gets its own read.
@@ -88,6 +102,7 @@ export function usePosition(): PositionState {
     debt,
     repaidByYield,
     credit,
+    pendingYield,
     score,
     maxLtvBps,
     selfRepayRateBps,
@@ -97,6 +112,7 @@ export function usePosition(): PositionState {
     position: {
       collateral,
       debt,
+      pendingYield,
       repaidByYield,
       credit,
       score,

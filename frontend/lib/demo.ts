@@ -14,6 +14,7 @@ import { ASSUMED_YIELD_RATE_BPS } from "./contracts";
 export const DEMO_POSITION = {
   collateral: 1_000_000_000n, // $1,000.00
   debt: 61_400_000n, //          $61.40 left of a $100 draw
+  pendingYield: 4_200_000n, //   $4.20 proven, waiting to be applied
   repaidByYield: 38_600_000n, // $38.60 retired by yield alone
   credit: 0n,
   score: 19n,
