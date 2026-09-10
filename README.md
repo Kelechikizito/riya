@@ -37,3 +37,28 @@ Say Ada has $1,000 of USDC and wants cash now without selling.
    her new limit, or walk away with her $1,000.
 
 Ada never repaid a penny. Her savings did it.
+
+But there is an honest problem, and you should know it before a judge asks. s_protocolFees is a number on Creditcoin representing a claim on USDC sitting in the Ethereum escrow. Paying it out means moving money from Ethereum, which needs the outbound leg. So riya accrues revenue in v1 and cannot collect it.
+
+The fix, and it needs no writability
+
+Mint the fee as RiyaUSD to a treasury address.
+
+This is not creating money from nothing. Look at what your own RiyaUSD NatSpec already says: the full gross harvest lands in the escrow, but only 85% is distributed into s_yieldPerShare. That 15% is real USDC in the escrow with no claim against it. Minting the treasury's RiyaUSD against it consumes exactly that margin. Every token stays backed.
+
+What changes:
+
+solidity
+s_protocolFees += fee;
+I_RIYA_USD.mint(I_TREASURY, fee);
+
+Revenue becomes a spendable balance on Creditcoin on day one rather than an IOU waiting on a feature that does not exist. That is the difference between "we have a business model" and "we have a business model you can watch working in the demo."
+
+## Demo
+
+Say it out loud in the pitch rather than hoping nobody notices. "We compress a month of yield into one transaction so this fits in five minutes. The adapter is tested against real Aave V4 on a mainnet fork."
+
+Do not discover the length of that wait during the demo. Two mitigations, and I would do both:
+
+- Run the deposit before you start presenting, so collateral is already on Creditcoin when you begin. Demo the harvest leg live, since that is the interesting half anyway.
+- Have a recording of a full run as a fallback.
