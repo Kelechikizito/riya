@@ -45,14 +45,16 @@ contract ChainKeyHarness is DeployRiyaDestinationChain {
  *      What this still cannot prove is that riya's bytecode runs on Creditcoin's EVM, since
  *      a fork executes in revm rather than on the node. Only a real deployment settles that.
  *
- *      Skipped when `CREDITCOIN_RPC_URL` is unset, so a checkout with no `.env` still runs
- *      the rest of the suite.
+ *      The fork resolves through the `creditcoin_testnet` alias in `foundry.toml`, so
+ *      `CREDITCOIN_RPC_URL` has to be set or this suite fails rather than skipping.
  */
 contract CreditcoinTestnetForkTest is Test {
     uint64 constant CHAIN_KEY_SEPOLIA = 1;
     uint64 constant CHAIN_KEY_ETH_MAINNET = 3;
     uint64 constant ETH_SEPOLIA_CHAIN_ID = 11155111;
     uint64 constant ETH_MAINNET_CHAIN_ID = 1;
+
+    uint256 creditCoinRpcUrl;
 
     string constant CHAIN_INFO_ADDRESS = "0x0000000000000000000000000000000000000fd3";
     string constant BLOCK_PROVER_ADDRESS = "0x0000000000000000000000000000000000000fd2";
@@ -66,13 +68,7 @@ contract CreditcoinTestnetForkTest is Test {
     address alice = makeAddr("alice");
 
     function setUp() public {
-        string memory url = vm.envOr("CREDITCOIN_RPC_URL", string(""));
-        if (bytes(url).length == 0) {
-            vm.skip(true);
-            return;
-        }
-
-        vm.createSelectFork(url);
+        creditCoinRpcUrl = vm.createSelectFork("creditcoin_testnet");
 
         vm.setEnv("PRIVATE_KEY", vm.toString(SharedEnv.DEPLOYER_KEY));
         vm.setEnv("RIYA_ESCROW_ADDRESS", vm.toString(SharedEnv.ESCROW));
