@@ -23,6 +23,7 @@ const PHASES = [
     items: [
       "External audits",
       "Batched harvests tuned to Ethereum mainnet gas.",
+      "Proven impairment marks, so an Aave loss prices into collateral and stops backing new borrowing instead of accruing silently",
       "Permissionless readability watchers, so no single operator can stall proofs",
       "More collateral assets and additional yield adapters behind IYieldAdapter",
     ],
