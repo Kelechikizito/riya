@@ -65,9 +65,6 @@ export function DocsCta() {
           >
             Open the docs
           </Link>
-          <span className="rounded-full border border-dashed border-line px-3 py-1.5 text-[12px] text-faint">
-            Work in progress
-          </span>
         </div>
       </div>
     </Section>
