@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
+
+import {DeploymentRecord} from "script/DeploymentRecord.s.sol";
 
 import {AaveV4Adapter} from "src/adapters/AaveV4Adapter.sol";
 import {RiyaEscrow} from "src/source-chain/ethereum/RiyaEscrow.sol";
@@ -21,7 +22,7 @@ import {HelperConfig} from "script/HelperConfig.s.sol";
  *
  *      This MUST be one script. Splitting it in two breaks the nonce prediction.
  */
-contract DeployRiyaSourceChain is Script {
+contract DeployRiyaSourceChain is DeploymentRecord {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -66,6 +67,10 @@ contract DeployRiyaSourceChain is Script {
 
         // The prediction is load-bearing, so prove it rather than assume it.
         _assertPrediction(predictedEscrow, address(escrow));
+
+        _record("AAVE_V4_ADAPTER_ADDRESS", address(adapter));
+        _record("RIYA_ESCROW_ADDRESS", address(escrow));
+        _save("source");
 
         console2.log("deployer :", deployer);
         console2.log("adapter  :", address(adapter));

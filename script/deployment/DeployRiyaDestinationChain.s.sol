@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
+
+import {DeploymentRecord} from "script/DeploymentRecord.s.sol";
 
 import {LoanLedger} from "src/destination-chain/LoanLedger.sol";
 import {RiyaASC} from "src/destination-chain/RiyaASC.sol";
@@ -23,7 +24,7 @@ import {HelperConfigDestination} from "script/HelperConfigDestination.s.sol";
  *      Run `DeployRiyaSourceChain` first: `RIYA_ESCROW_ADDRESS` and
  *      `AAVE_V4_ADAPTER_ADDRESS` are its output.
  */
-contract DeployRiyaDestinationChain is Script {
+contract DeployRiyaDestinationChain is DeploymentRecord {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -88,6 +89,12 @@ contract DeployRiyaDestinationChain is Script {
         vm.stopBroadcast();
 
         _assertPrediction(predictedLedger, address(ledger));
+
+        _record("RIYA_USD_ADDRESS", address(riyaUSD));
+        _record("RIYA_ASC_ADDRESS", address(asc));
+        _record("LOAN_LEDGER_ADDRESS", address(ledger));
+        _record("CHAIN_KEY", uint256(chainKey));
+        _save("destination");
 
         console2.log("deployer  :", deployer);
         console2.log("riyaUSD   :", address(riyaUSD));
