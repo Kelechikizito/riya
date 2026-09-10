@@ -1,5 +1,7 @@
 # The one-sentence pitch
 
+**Automatic self-repaying loan.**
+
 **You put money to work on Ethereum. You borrow against it on Creditcoin. The
 profits your money earns on Ethereum pay off the loan for you, automatically,
 until you owe nothing.**
