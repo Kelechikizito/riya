@@ -5,7 +5,6 @@ import { ConnectButton } from "@/components/site/ConnectButton";
 import { parseUnits } from "viem";
 import { useWriteContract } from "wagmi";
 import { ADDRESSES, ASSUMED_YIELD_RATE_BPS, loanLedgerAbi } from "@/lib/contracts";
-import { DEMO_ACTIVITY } from "@/lib/demo";
 import {
   ASSET_DECIMALS,
   formatDuration,
@@ -14,7 +13,9 @@ import {
   yearsToZero,
 } from "@/lib/format";
 import { SCORE_TIERS, tierForScore } from "@/lib/score";
-import { usePosition } from "@/lib/usePosition";
+import { effectiveDebt, usePosition } from "@/lib/usePosition";
+import { useActivity, type ActivityEvent } from "@/lib/useActivity";
+import { useDeposit } from "@/lib/useDeposit";
 
 export function Dashboard() {
   const { position, live, connected } = usePosition();
@@ -24,6 +25,11 @@ export function Dashboard() {
     (position.collateral * position.maxLtvBps) / 10_000n;
   const available =
     borrowCeiling > position.debt ? borrowCeiling - position.debt : 0n;
+
+  // Settlement is lazy, so the stored debt is stale by whatever yield has been proven
+  // since the position was last touched. Showing the settled figure is what makes a
+  // harvest visible the moment its proof lands, rather than on the user's next action.
+  const owed = effectiveDebt(position);
 
   const totalDrawn = position.debt + position.repaidByYield;
   const retiredPct =
@@ -53,8 +59,14 @@ export function Dashboard() {
             <div>
               <p className="eyebrow">Outstanding debt</p>
               <p className="mt-3 font-mono text-[2.75rem] leading-none tabular text-credit-400 sm:text-[3.5rem]">
-                {formatUsd(position.debt)}
+                {formatUsd(owed)}
               </p>
+              {position.pendingYield > 0n && (
+                <p className="mt-2 font-mono text-[12px] text-yield-300">
+                  {formatUsd(position.pendingYield)} proven, applied on your next
+                  action
+                </p>
+              )}
             </div>
             <span className="rounded-full border border-credit-400/25 px-3 py-1 text-[11px] uppercase tracking-[0.14em] text-credit-400">
               Creditcoin
@@ -122,7 +134,12 @@ export function Dashboard() {
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_1.1fr]">
         <ScoreCard score={Number(position.score)} tierLabel={tier.label} />
         <BorrowPanel available={available} live={live} />
-        <ActivityFeed live={live} />
+        <ActivityFeed />
+      </div>
+
+      {/* ---------------------------------------------------------- third row */}
+      <div className="mt-4">
+        <DepositPanel />
       </div>
     </div>
   );
@@ -335,7 +352,156 @@ function BorrowPanel({ available, live }: { available: bigint; live: boolean }) 
   );
 }
 
-function ActivityFeed({ live }: { live: boolean }) {
+/**
+ * The Ethereum half, which is the only place a position can start.
+ *
+ * The panel is deliberately explicit that the deposit does not land on Creditcoin by
+ * itself. A user who deposits and sees nothing appear would assume it failed; the honest
+ * answer is that Creditcoin has to attest the block first, and that wait is the product.
+ */
+function DepositPanel() {
+  const { step, error, txHash, balance, minDeposit, available, deposit, reset } =
+    useDeposit();
+  const [amount, setAmount] = useState("");
+
+  const parsed = useMemo(() => {
+    if (!amount) return null;
+    try {
+      return parseUnits(amount, ASSET_DECIMALS);
+    } catch {
+      return null;
+    }
+  }, [amount]);
+
+  const belowFloor = parsed !== null && parsed < minDeposit;
+  const busy =
+    step === "switching" ||
+    step === "minting" ||
+    step === "approving" ||
+    step === "depositing";
+  const canSubmit = available && parsed !== null && parsed > 0n && !belowFloor && !busy;
+
+  return (
+    <div className="card p-6 sm:p-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="eyebrow">Add collateral</p>
+          <h2 className="mt-2 text-[1.35rem] font-semibold">Deposit on Ethereum</h2>
+          <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted">
+            Your dollars stay on Ethereum earning Aave yield. Only a proof crosses to
+            Creditcoin, and that is what becomes your collateral.
+          </p>
+        </div>
+        <span className="rounded-full border border-yield-300/25 px-3 py-1 text-[11px] uppercase tracking-[0.14em] text-yield-300">
+          Sepolia
+        </span>
+      </div>
+
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <label
+            htmlFor="deposit-amount"
+            className="block text-[11px] uppercase tracking-[0.14em] text-faint"
+          >
+            Amount
+          </label>
+          <div className="mt-2 flex items-center gap-2 rounded-xl border border-line bg-raised px-4 py-3 focus-within:border-yield-300/50">
+            <input
+              id="deposit-amount"
+              inputMode="decimal"
+              placeholder="1000.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full bg-transparent font-mono text-lg tabular text-ink outline-none placeholder:text-faint"
+            />
+            <span className="font-mono text-xs text-faint">mUSD</span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => parsed && deposit(parsed)}
+          disabled={!canSubmit}
+          className="cursor-pointer rounded-full bg-yield-300 px-6 py-3 text-sm font-medium text-void transition-colors duration-200 hover:bg-yield-200 disabled:cursor-not-allowed disabled:bg-line disabled:text-faint sm:w-auto"
+        >
+          {stepLabel(step, available)}
+        </button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 font-mono text-[12px] text-faint">
+        <span>Balance: {formatUsd(balance)}</span>
+        <span>Minimum: {formatUsd(minDeposit)}</span>
+      </div>
+
+      {belowFloor && (
+        <p className="mt-2.5 text-[12px] text-danger">
+          Below the {formatUsd(minDeposit)} floor. Every deposit costs the same to prove,
+          whatever its size.
+        </p>
+      )}
+      {error && <p className="mt-2.5 text-[12px] text-danger">{error}</p>}
+
+      {step === "proving" && (
+        <div className="mt-5 rounded-xl border border-dashed border-yield-300/30 bg-yield-300/5 p-4">
+          <p className="text-[14px] text-ink">
+            Deposited on Ethereum. Waiting for Creditcoin to attest the block.
+          </p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+            The readability worker proves the transaction through the Block Prover
+            Precompile once the block is attested. Your collateral appears above when it
+            does. Nothing here is bridged, and no tokens move between chains.
+          </p>
+          {txHash && (
+            <a
+              href={`https://sepolia.etherscan.io/tx/${txHash}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2.5 inline-block font-mono text-[12px] text-yield-300 underline underline-offset-2"
+            >
+              View on Etherscan
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={reset}
+            className="mt-3 block cursor-pointer text-[12px] text-faint underline underline-offset-2 hover:text-muted"
+          >
+            Deposit again
+          </button>
+        </div>
+      )}
+
+      {!available && (
+        <p className="mt-4 text-[12px] leading-relaxed text-faint">
+          Enabled once RiyaEscrow and the demo dollar are deployed and their addresses are
+          set.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function stepLabel(step: string, available: boolean): string {
+  if (!available) return "Awaiting deployment";
+  switch (step) {
+    case "switching":
+      return "Switch network…";
+    case "minting":
+      return "Minting…";
+    case "approving":
+      return "Approving…";
+    case "depositing":
+      return "Confirm deposit…";
+    case "proving":
+      return "Awaiting proof";
+    default:
+      return "Deposit";
+  }
+}
+
+function ActivityFeed() {
+  const { events, live } = useActivity();
+
   return (
     <div className="card flex flex-col p-6">
       <div className="flex items-center justify-between">
@@ -348,7 +514,7 @@ function ActivityFeed({ live }: { live: boolean }) {
       </div>
 
       <ul className="mt-5 space-y-4">
-        {DEMO_ACTIVITY.map((event) => {
+        {events.map((event: ActivityEvent) => {
           const isHarvest = event.kind === "harvest";
           const isDeposit = event.kind === "deposit";
           const tone = isHarvest || isDeposit ? "text-yield-300" : "text-credit-400";
@@ -370,7 +536,18 @@ function ActivityFeed({ live }: { live: boolean }) {
                 <p className="truncate font-mono text-[11px] text-faint">
                   {event.detail}
                 </p>
-                <p className="mt-0.5 text-[11px] text-faint">{event.at}</p>
+                {event.explorerUrl ? (
+                  <a
+                    href={event.explorerUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-0.5 inline-block text-[11px] text-faint underline decoration-line underline-offset-2 hover:text-muted"
+                  >
+                    {event.at}
+                  </a>
+                ) : (
+                  <p className="mt-0.5 text-[11px] text-faint">{event.at}</p>
+                )}
               </div>
             </li>
           );
