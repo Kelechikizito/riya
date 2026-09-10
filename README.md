@@ -62,3 +62,6 @@ Do not discover the length of that wait during the demo. Two mitigations, and I 
 
 - Run the deposit before you start presenting, so collateral is already on Creditcoin when you begin. Demo the harvest leg live, since that is the interesting half anyway.
 - Have a recording of a full run as a fallback.
+
+## Hackathon Judging Criterion
+
