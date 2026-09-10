@@ -34,7 +34,7 @@ export function Hero() {
           </p>
 
           <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-faint">
-            Your savings make the payments. You just wait.
+            Your savings make the payments. You wait and do nothing.
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-3">

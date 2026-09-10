@@ -3,7 +3,10 @@ import { Section } from "@/components/ui/Section";
 
 const PREREQS = [
   { label: "An EVM wallet", detail: "MetaMask, Rabby or any injected wallet" },
-  { label: "Sepolia ETH", detail: "For the deposit transaction — free from a faucet" },
+  {
+    label: "Sepolia ETH",
+    detail: "For the deposit transaction, from a faucet",
+  },
   { label: "Test USDC", detail: "The asset you are depositing as collateral" },
   { label: "Testnet CTC", detail: "Gas on Creditcoin, for borrowing" },
 ] as const;
@@ -15,7 +18,7 @@ const STEPS = [
     chain: "Setup",
     side: "neutral",
     title: "Connect and add Creditcoin",
-    body: "Hit Connect in the top right. Your wallet will offer to add Creditcoin Testnet if it does not have it. The same address is used on both chains — riya reuses your Ethereum address verbatim on Creditcoin, so there is no second account to manage.",
+    body: "Hit Connect in the top right. Your wallet will offer to add Creditcoin Testnet if it does not have it. The same address is used on both chains. Riya reuses your Ethereum address verbatim on Creditcoin, so there is no second account to manage.",
   },
   {
     n: 2,
@@ -23,7 +26,7 @@ const STEPS = [
     chain: "Ethereum",
     side: "yield",
     title: "Deposit USDC into the escrow",
-    body: "Approve the escrow, then deposit. There is a minimum deposit — small deposits cost more in proof gas than they are worth. Once this lands, your collateral is in Aave and earning.",
+    body: "Approve the escrow, then deposit. There is a minimum deposit, small deposits cost more in gas than they are worth. Once this lands, your collateral is in Aave and earning.",
   },
   {
     n: 3,
@@ -31,7 +34,7 @@ const STEPS = [
     chain: "Creditcoin",
     side: "credit",
     title: "Wait for the proof to land",
-    body: "You do nothing here. A watcher picks up your deposit event, waits for the Ethereum block to be final enough to prove, and submits it to riya's ASC on Creditcoin. Your dashboard flips from pending to credited when the ledger has it.",
+    body: "You do nothing here. A readeability worker picks up your deposit event, waits for the Ethereum block to be final enough to prove, and submits it to Riya's ASC on Creditcoin. Your dashboard flips from pending to credited when the ledger has it.",
   },
   {
     n: 4,
@@ -39,7 +42,7 @@ const STEPS = [
     chain: "Creditcoin",
     side: "credit",
     title: "Borrow rUSD",
-    body: "Your opening limit is 10% of collateral. Draw any part of it and rUSD is minted to your address — a plain ERC-20 you can move, hold, or spend anywhere on Creditcoin.",
+    body: "Your opening limit is 10% of collateral. Draw any part of it and rUSD is minted to your address on Creditcoin.",
   },
   {
     n: 5,
@@ -47,7 +50,7 @@ const STEPS = [
     chain: "Automatic",
     side: "yield",
     title: "Watch the debt fall",
-    body: "Every harvest is proven and applied against your debt. Nothing is asked of you. The dashboard shows the debt, the amount retired so far, and how long the rest will take at the current yield rate.",
+    body: "Every yield harvest is proven and applied against your debt. Nothing is asked of you. The dashboard shows the debt, the amount retired so far, and how long the rest will take at the current yield rate.",
   },
 ] as const;
 
@@ -57,7 +60,7 @@ export function Onboarding() {
       id="start"
       eyebrow="Onboarding guide"
       title="Your first ten minutes"
-      lede="Five steps, two chains, and one of them you do nothing for. Everything below is on testnet — no real funds are involved."
+      lede="Five steps, two chains. For V1, everything below is on testnet, no real funds are involved."
     >
       <div className="grid gap-4 lg:grid-cols-[1fr_1.6fr]">
         {/* ------------------------------------------------------ checklist */}

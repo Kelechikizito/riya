@@ -2,29 +2,29 @@ import { Section } from "@/components/ui/Section";
 
 const PILLARS = [
   {
-    title: "Verified by the chain, not a committee",
-    body: "Creditcoin re-checks the Ethereum block itself through the Block Prover Precompile. riya's ASC additionally requires receiptStatus == 1 and pins each event to the contract that may emit it — so a proof that decodes but did not succeed is rejected.",
+    title: "Verified by the chain",
+    body: "Creditcoin re-checks the Ethereum block itself through the Block Prover Precompile. Riya's ASC additionally requires receiptStatus == 1 and pins each event to the contract that may emit it. So a proof that decodes but did not succeed is rejected.",
     mono: "0x0FD2",
     icon: "shield",
     side: "credit",
   },
   {
     title: "One copy of the accounting",
-    body: "Ethereum holds the money and states facts. Creditcoin decides what they mean — collateral, fee, score, limit, debt. State that exists in one place cannot drift from a copy, so an entire class of desync bugs never gets written.",
+    body: "Ethereum holds the money and states facts. Creditcoin decides what they mean — collateral, fee, score, limit, debt. State that exists in one place cannot drift from a copy.",
     mono: "no mirror state",
     icon: "layers",
     side: "yield",
   },
   {
-    title: "The destination is the point",
-    body: "rUSD is an ordinary ERC-20 on Creditcoin. Any Creditcoin wallet, contract or DEX can accept it. Your position never needs to leave, and that is a feature rather than a truncation.",
+    title: "The destination",
+    body: "rUSD is an ERC-20 on Creditcoin. Any Creditcoin wallet, contract or DEX can accept it. Your position never needs to leave.",
     mono: "rUSD · 6 decimals",
     icon: "coin",
     side: "credit",
   },
   {
     title: "Nothing waits on writability",
-    body: "Every proof travels inbound: Ethereum to Creditcoin. riya needs no outbound message, so nothing in the product is blocked on a capability that is still in audit. What ships today is complete on its own terms.",
+    body: "Every proof travels inbound: Ethereum to Creditcoin. Riya V1 needs no outbound message, so nothing in the product is blocked on writabliity.",
     mono: "readability only",
     icon: "arrow",
     side: "yield",
@@ -82,7 +82,7 @@ export function WhyCreditcoin() {
       id="why"
       eyebrow="Technical alignment"
       title="Why this can only be built on Creditcoin"
-      lede="The useful test for a cross-chain design is whether it would still work, unchanged, on any other L2. riya answers no — four times."
+      lede="The useful test for a cross-chain design is whether it would still work, unchanged, on any other L2."
     >
       <div className="grid gap-4 sm:grid-cols-2">
         {PILLARS.map((p) => {
@@ -119,11 +119,8 @@ export function WhyCreditcoin() {
 
       <div className="card mt-4 border-dashed p-6 sm:p-7">
         <p className="text-[15px] leading-relaxed text-muted">
-          <span className="text-ink">The honest version:</span> a generic yield
-          vault could ship on any chain tomorrow. riya could not. Take the
-          precompile away and there is no way for the loan to learn that the
-          collateral earned anything — the product stops existing rather than
-          getting slower.
+          <span className="text-ink">The truth:</span> Riya&apos;s Precompile is
+          the main reason the loan learns that the collateral earned anything.
         </p>
       </div>
     </Section>

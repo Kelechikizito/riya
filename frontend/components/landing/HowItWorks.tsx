@@ -10,7 +10,7 @@ const STEPS = [
     side: "yield",
     chain: "Ethereum",
     title: "You deposit $1,000 of USDC",
-    body: "It goes into RiyaEscrow, which hands it straight to Aave V4. The escrow keeps no accounting of its own — it takes custody, emits one event, and that is the entire contract.",
+    body: "It goes into RiyaEscrow, which hands it straight to Aave V4. The escrow keeps no accounting of its own. It emits one event, and that is the entire contract.",
     figure: "$1,000.00",
     figureLabel: "collateral",
   },
@@ -18,8 +18,8 @@ const STEPS = [
     n: "02",
     side: "credit",
     chain: "Creditcoin",
-    title: "The deposit is proven, not relayed",
-    body: "A watcher notices the deposit and asks Creditcoin to verify it. Creditcoin checks the Ethereum block itself through the Block Prover Precompile. No multisig, no bridge, no committee is trusted in between.",
+    title: "Your deposit is proven",
+    body: "A readability worker notices your deposit and asks Creditcoin to verify it. Creditcoin checks the Ethereum block itself through the Block Prover Precompile.",
     figure: "0x0FD2",
     figureLabel: "precompile",
   },
@@ -28,7 +28,7 @@ const STEPS = [
     side: "credit",
     chain: "Creditcoin",
     title: "You borrow $100 — 10% to start",
-    body: "New addresses open at a 10% limit and mint rUSD against the collateral. The limit is low on purpose: it is a credit line you have not used yet, and the ladder is how you raise it.",
+    body: "New addresses open at a 10% limit and mint rUSD against the collateral. The limit is a credit score you have not used yet, increses with your usage of Riya.",
     figure: "$100.00",
     figureLabel: "rUSD minted",
   },
@@ -36,8 +36,8 @@ const STEPS = [
     n: "04",
     side: "yield",
     chain: "Ethereum",
-    title: "The position earns, and is harvested",
-    body: "Aave pays roughly 5% a year on the $1,000. Because Aave positions rebase silently, riya periodically pulls the profit out in a real transaction — turning continuous yield into a discrete, provable fact.",
+    title: "Your position earns, and is harvested",
+    body: "Aave pays roughly 5% a year on the $1,000. Because Aave positions rebase silently, Riya periodically pulls the profit out in a real transaction, turning continuous yield into a discrete, provable fact.",
     figure: "≈ $50",
     figureLabel: "per year",
   },
@@ -54,8 +54,8 @@ const STEPS = [
     n: "06",
     side: "credit",
     chain: "Creditcoin",
-    title: "The debt reaches zero",
-    body: "Then you owe nothing. Redraw at whatever limit your score has earned by then, or stop. Along the way, every dollar yield retired raised your standing.",
+    title: "Your debt reaches zero",
+    body: "Then you owe nothing.",
     figure: "$0.00",
     figureLabel: "owed",
   },
@@ -69,7 +69,7 @@ export function HowItWorks() {
       title="One deposit, six steps, no repayments"
       lede={
         <>
-          Ada has $1,000 of USDC and wants cash without selling. Here is exactly
+          You have $1,000 USDC and want cash without selling. Here is exactly
           what happens, in the order it happens.
         </>
       }
@@ -143,10 +143,9 @@ export function HowItWorks() {
       </ol>
 
       <p className="mt-8 text-[15px] leading-relaxed text-muted">
-        Ada never repaid a penny.{" "}
-        <span className="text-ink">Her savings did it for her.</span> This is
-        Alchemix&rsquo;s model — already proven to work — with the savings on one chain
-        and the loan on another.
+        You never repaid a penny.{" "}
+        <span className="text-ink">Your savings did it for you.</span> Your
+        savings on one chain and the loan on another.
       </p>
     </Section>
   );

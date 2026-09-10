@@ -6,7 +6,7 @@ const PHASES = [
     status: "shipped",
     horizon: "Hackathon submission",
     title: "The vertical slice",
-    body: "One asset, one source chain, one destination. USDC on Ethereum Sepolia into Aave V4, harvests proven onto Creditcoin Testnet, rUSD minted against a credit ladder that only proven yield can climb.",
+    body: "One asset, one source chain, one destination. USDC on Ethereum Sepolia into Aave V4, harvests proven onto Creditcoin Testnet, rUSD minted against a credit score that only proven yield can increase.",
     items: [
       "RiyaEscrow + AaveV4Adapter on Ethereum",
       "RiyaASC proof verification with receiptStatus and per-event address pinning",
@@ -19,11 +19,11 @@ const PHASES = [
     status: "next",
     horizon: "Post-hackathon",
     title: "Harden and open",
-    body: "Everything needed before anyone's real money is welcome. The economics do not change; the operational surface does.",
+    body: "Everything needed before anyone's real money is welcome.",
     items: [
-      "External audit of both legs, and a public risk disclosure",
-      "Batched harvests tuned to Ethereum mainnet gas — fewer, larger proofs",
-      "Permissionless watchers, so no single operator can stall proofs",
+      "External audits",
+      "Batched harvests tuned to Ethereum mainnet gas.",
+      "Permissionless readability watchers, so no single operator can stall proofs",
       "More collateral assets and additional yield adapters behind IYieldAdapter",
     ],
   },
@@ -32,11 +32,11 @@ const PHASES = [
     status: "planned",
     horizon: "Ecosystem",
     title: "Make rUSD worth holding",
-    body: "A borrowable dollar is only as useful as the places that take it. This phase is about the Creditcoin side of the ledger becoming somewhere you want to stay.",
+    body: "his phase is about the Creditcoin side of the ledger becoming valuable.",
     items: [
       "rUSD liquidity on Creditcoin DEXes",
-      "riya's credit score exposed as a read-only primitive other Creditcoin protocols can price against",
-      "Delegated borrowing — lend your unused limit to an address you trust",
+      "Riya's credit score exposed as a public read-only other Creditcoin protocols can price against",
+      "Delegated borrowing, lend your unused limit to an address you trust",
       "Merchant and payment rails for rUSD",
     ],
   },
@@ -44,11 +44,11 @@ const PHASES = [
     phase: "Phase 3",
     status: "gated",
     horizon: "Blocked on protocol capability",
-    title: "The return leg",
-    body: "Stated plainly because it is not ours to schedule: these need Creditcoin capabilities that are not released yet. Nothing in Phases 0–2 depends on them, and the demo does not touch them.",
+    title: "The return leg, Attestcoin writability",
+    body: "These need Creditcoin features that are not released yet.",
     items: [
-      "Collateral release back to Ethereum — needs writability, currently in third-party audit",
-      "Additional source chains — Attestcoin proves Ethereum only today",
+      "Collateral release back to Ethereum, needs writability, currently in third-party audit",
+      "Additional source chains asides Ethereum Mainnet",
       "Cross-chain liquidation-free refinancing between destinations",
     ],
   },
@@ -67,7 +67,7 @@ export function Roadmap() {
       id="roadmap"
       eyebrow="Roadmap"
       title="Where this goes next"
-      lede="Phases 0 through 2 are ours to execute. Phase 3 is not, and saying so is the point — nothing on the critical path is waiting for a capability that has not shipped."
+      lede="Phases 0 through 2 are ours to execute. Phase 3 is not."
     >
       <div className="relative">
         {/* The spine. Hidden on mobile, where the cards stack anyway. */}

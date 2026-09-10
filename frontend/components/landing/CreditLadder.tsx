@@ -23,8 +23,8 @@ export function CreditLadder() {
     <Section
       id="credit"
       eyebrow="Credit score"
-      title="A limit you earn, not one you buy"
-      lede="Your borrow limit starts at 10% and climbs to 50%. It moves for exactly one reason: yield retiring your debt. Cash repayments do not count."
+      title="A limit you earn"
+      lede="Your borrow limit starts at 10% and climbs to 50%. It moves on account that yield retires your debt. Cash repayments do not count."
     >
       <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
         {/* ------------------------------------------------- interactive dial */}
@@ -32,7 +32,7 @@ export function CreditLadder() {
           <p className="eyebrow">Try it</p>
           <label
             htmlFor={sliderId}
-            className="mt-3 block text-[15px] leading-relaxed text-muted"
+            className="mt-3 block text-[15px] leading-relaxed text-bold"
           >
             On $1,000 of collateral, drag to change how much debt your{" "}
             <span className="text-yield-300">yield</span> has retired.
@@ -59,7 +59,11 @@ export function CreditLadder() {
 
           <div className="mt-6 grid grid-cols-3 gap-4 border-t border-line pt-6">
             <Stat label="Score" value={String(score)} tone="credit" />
-            <Stat label="Max LTV" value={`${tier.ltvBps / 100}%`} tone="credit" />
+            <Stat
+              label="Max LTV"
+              value={`${tier.ltvBps / 100}%`}
+              tone="credit"
+            />
             <Stat
               label="You may borrow"
               value={`$${limit.toLocaleString("en-US")}`}
@@ -68,9 +72,8 @@ export function CreditLadder() {
           </div>
 
           <p className="mt-6 text-[13px] leading-relaxed text-faint">
-            The score is relative to your <em>current</em> collateral, so a second
-            deposit lowers the score while raising the absolute amount you can
-            draw. That is the intended behaviour, not a rounding artefact.
+            The credit score is relative to your <em>cumulative</em> debt
+            retired.
           </p>
         </div>
 
@@ -120,10 +123,9 @@ export function CreditLadder() {
             </h3>
             <p className="mt-3 text-[14px] leading-relaxed text-muted">
               If repaying moved the score, anyone could borrow $100 and repay
-              $100 on a loop and buy the top tier in an afternoon without their
-              collateral ever doing any work. Only proven yield writes to the
-              score, so the ladder measures productive collateral — which is the
-              only thing worth extending credit against.
+              $100 on a loop without their collateral ever doing any work. Only
+              proven yield writes to the score, so the ladder measures
+              productive collateral.
             </p>
           </div>
         </div>
