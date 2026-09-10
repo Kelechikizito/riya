@@ -2,12 +2,8 @@ import { Section } from "@/components/ui/Section";
 
 const RISKS = [
   {
-    title: "Your collateral is locked in v1",
-    body: "There is a withdraw path in the adapter and nothing calls it. Releasing collateral back to Ethereum would need Creditcoin to send a message outbound, which is not available. We did not add an owner-gated escape hatch, because an owner who can drain the vault is a worse problem than a lock — and a user who could withdraw freely would pull their money and keep the loan.",
-  },
-  {
     title: "If Aave is impaired, riya absorbs it",
-    body: "Yield is measured as what Aave holds minus what we put in. If that reserve takes a loss, the collateral shrinks while the Creditcoin debt does not. riya has no liquidation path at all, so the protocol wears the gap rather than the borrower. This is riya's real risk and we would rather name it than have you find it.",
+    body: "Yield is measured as what Aave holds minus what we put in. If that reserve takes a loss, the collateral shrinks while the Creditcoin debt does not. Riya has no liquidation path at all, so the protocol wears the gap rather than the borrower. This is riya's real risk and we would rather name it than have you find it.",
   },
   {
     title: "Proofs are not instant",
@@ -15,7 +11,7 @@ const RISKS = [
   },
   {
     title: "This is unaudited testnet software",
-    body: "Built inside a hackathon window. It has fork tests on the Ethereum leg and no external audit on either. An audit is the first item in Phase 1 for exactly this reason. Do not put anything you cannot lose in front of it.",
+    body: "Built inside a hackathon window. It has fork tests on the the Ethereum contracts and no external audit on either. An audit is the first item in Phase 1 for exactly this reason. Do not put anything you cannot lose in front of it.",
   },
 ] as const;
 
