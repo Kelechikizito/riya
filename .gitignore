@@ -16,6 +16,9 @@ out/
 # Dotenv file
 .env
 
+# Optional keystore password file for unattended deploys (see the Makefile)
+.keystore-password
+
 # Local Claude Code settings
 .claude/settings.local.json
 

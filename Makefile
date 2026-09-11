@@ -21,7 +21,7 @@ export
         test test-unit test-fuzz test-integration test-fork test-local coverage coverage-report \
         offchain-install offchain-typecheck offchain-test offchain-abi worker keeper worker-once worker-dead keeper-once \
         deploy-mocks deploy-source deploy-destination deploy-all addresses verify-addresses clean-deployments \
-        deposit accrue harvest source-status sender senders preflight require-sender \
+        deposit accrue harvest source-status sender senders unlock preflight require-sender \
         borrow repay settle position \
         demo frontend-env frontend-dev frontend-build anvil
 
@@ -33,10 +33,18 @@ DEPLOYER_ACCOUNT := sepolia-acc
 KEEPER_ACCOUNT   := riya-keeper
 WORKER_ACCOUNT   := readability-worker
 
+# Optional, and worth setting before a demo: a file containing only the keystore password,
+# with no trailing newline issues to get wrong under pressure. It removes the interactive
+# prompt entirely, which is the difference between a deploy that fails on the third attempt
+# and one that just runs. Keep it outside the repo; `.keystore-password` is gitignored.
+#   printf '%s' 'your-password' > .keystore-password && chmod 600 .keystore-password
+KEYSTORE_PASSWORD_FILE ?=
+PASSFILE := $(if $(KEYSTORE_PASSWORD_FILE),--password-file $(KEYSTORE_PASSWORD_FILE),)
+
 # `--sender` is required alongside `--account`: forge needs the address during simulation,
 # before it unlocks the keystore, and the deploy scripts predict nonces against it. Get it
 # with `make sender` and put DEPLOYER_ADDRESS in .env.
-SIGNER := --account $(DEPLOYER_ACCOUNT) $(if $(DEPLOYER_ADDRESS),--sender $(DEPLOYER_ADDRESS),)
+SIGNER := --account $(DEPLOYER_ACCOUNT) $(if $(DEPLOYER_ADDRESS),--sender $(DEPLOYER_ADDRESS),) $(PASSFILE)
 
 # Verification is source-chain only, and the key is passed explicitly rather than left to
 # foundry.toml's ${ETHERSCAN_API_KEY} placeholder, which `forge config` shows unresolved.
@@ -67,6 +75,7 @@ help:
 	@echo ""
 	@echo "  Keys come from the Foundry keystore: $(DEPLOYER_ACCOUNT), $(KEEPER_ACCOUNT), $(WORKER_ACCOUNT)."
 	@echo "  Run 'make senders' once and put the three addresses in .env."
+	@echo "  'make unlock' checks the keystore password without spending anything."
 	@echo ""
 	@echo "  Amounts are in USDC's 6 decimals. Override with AMOUNT=..., e.g."
 	@echo "    make deposit AMOUNT=500000000     # \$$500"
@@ -177,7 +186,17 @@ keeper-once:
 
 # The deployer's address, for DEPLOYER_ADDRESS in .env. Prompts for the password.
 sender:
-	@cast wallet address --account $(DEPLOYER_ACCOUNT)
+	@cast wallet address --account $(DEPLOYER_ACCOUNT) $(PASSFILE)
+
+# Checks the password decrypts, and that the account it unlocks is the one .env expects.
+# Costs nothing, and catches a wrong password before a deploy spends four minutes reaching
+# the signing step. Run it whenever a deploy fails with "incorrect password".
+unlock:
+	@addr=$$(cast wallet address --account $(DEPLOYER_ACCOUNT) $(PASSFILE) 2>&1); \
+	if [ "$${addr#0x}" = "$$addr" ]; then echo "  password REJECTED for $(DEPLOYER_ACCOUNT)"; echo "  $$addr"; exit 1; fi; \
+	echo "  $(DEPLOYER_ACCOUNT)  unlocks $$addr"; \
+	if [ -n "$(DEPLOYER_ADDRESS)" ] && [ "$$addr" != "$(DEPLOYER_ADDRESS)" ]; then \
+	  echo "  MISMATCH: .env says $(DEPLOYER_ADDRESS)"; exit 1; fi
 
 # All three, for .env. Three prompts. Only the deployer's is load-bearing; the other two
 # exist so `preflight` can check that the keeper and worker are funded.
