@@ -15,6 +15,13 @@ import {HelperConfigDestination} from "script/HelperConfigDestination.s.sol";
 import {MockChainInfo} from "test/mocks/MockChainInfo.sol";
 import {SharedEnv} from "test/helpers/SharedEnv.sol";
 
+/// @dev Stands in for a precompile that answers, but badly.
+contract AlwaysReverts {
+    fallback() external {
+        revert("no");
+    }
+}
+
 /**
  * @dev Two jobs.
  *
@@ -189,6 +196,42 @@ contract DeployScriptsTest is Test {
             )
         );
         script.run();
+    }
+
+    /**
+     * @dev What actually happens under `forge script`. Creditcoin's precompiles are native
+     *      node code with no bytecode to fetch, so forge's local simulation cannot reach
+     *      `0x0FD3` and the registry call returns empty. The deployment must proceed rather
+     *      than fail: `make verify-chain-key` is what enforces the key, using `cast call`
+     *      against the node itself.
+     */
+    function testDestinationDeployProceedsWhenThePrecompileIsUnreachable() external {
+        // ARRANGE
+        _prepareCreditcoin();
+        vm.etch(CHAIN_INFO, ""); // as forge sees it: an address with no code
+        DestinationDeployHarness script = new DestinationDeployHarness();
+
+        // ACT
+        (RiyaUSD riyaUSD, RiyaASC asc, LoanLedger ledger,) = script.run();
+
+        // ASSERT
+        assertEq(riyaUSD.I_LEDGER(), address(ledger), "deployed anyway");
+        assertEq(asc.I_CHAIN_KEY(), 1);
+    }
+
+    /// @dev Same outcome if the precompile is there but the call reverts. An unreachable
+    ///      registry is never a reason to abort a deployment the Makefile already checked.
+    function testDestinationDeployProceedsWhenTheRegistryCallReverts() external {
+        // ARRANGE
+        _prepareCreditcoin();
+        vm.etch(CHAIN_INFO, address(new AlwaysReverts()).code);
+        DestinationDeployHarness script = new DestinationDeployHarness();
+
+        // ACT
+        (, RiyaASC asc,,) = script.run();
+
+        // ASSERT
+        assertEq(asc.I_CHAIN_KEY(), 1);
     }
 
     /// @dev The check runs before `startBroadcast`, so a bad key costs no gas at all.

@@ -20,7 +20,7 @@ export
 .PHONY: help install build fmt fmt-check lint clean snapshot \
         test test-unit test-fuzz test-integration test-fork test-local coverage coverage-report \
         offchain-install offchain-typecheck offchain-test offchain-abi worker keeper worker-once worker-dead keeper-once \
-        deploy-mocks deploy-source deploy-destination deploy-all addresses verify-addresses clean-deployments \
+        deploy-mocks deploy-source deploy-destination deploy-all addresses verify-addresses verify-chain-key clean-deployments \
         deposit accrue harvest source-status sender senders unlock preflight require-sender \
         borrow repay settle position \
         demo frontend-env frontend-dev frontend-build anvil
@@ -74,6 +74,7 @@ help:
 	@echo "  test       test  test-unit  test-fuzz  test-integration  test-fork  test-local  coverage"
 	@echo "  offchain   offchain-install  offchain-abi  offchain-test  worker  keeper"
 	@echo "  deploy     deploy-mocks  deploy-source  deploy-destination  addresses  verify-addresses"
+	@echo "             verify-chain-key"
 	@echo "  sepolia    deposit  accrue  harvest  source-status"
 	@echo "  creditcoin borrow  repay  settle  position"
 	@echo "  demo       demo  frontend-env  frontend-dev"
@@ -245,9 +246,31 @@ deploy-mocks: require-sender
 deploy-source: require-sender
 	forge script script/deployment/DeployRiyaSourceChain.s.sol:DeployRiyaSourceChain $(SEPOLIA_ARGS) -vvv
 
-# 3. The Creditcoin leg. Reads the two addresses above, and asserts the chain key
-#    against the live registry before spending any gas.
-deploy-destination: require-sender
+# The chain key is the single most dangerous constant in the project: RiyaASC cannot tell 1
+# from 3, the value is immutable, and a wrong one reads the wrong chain forever. The check
+# cannot live inside the script, because `forge script` simulates locally and Creditcoin's
+# precompiles are native node code with no bytecode to fetch. `cast call` reaches the node,
+# so that is where it belongs.
+CHAIN_INFO_PRECOMPILE := 0x0000000000000000000000000000000000000fD3
+
+# Sepolia's key in Creditcoin Testnet's registry, and the chain id it must resolve to.
+# `.env` wins if it sets CHAIN_KEY, since the worker reads the same variable.
+CHAIN_KEY             ?= 1
+CHAIN_KEY_EXPECTS     := 11155111
+
+verify-chain-key:
+	@raw=$$(cast call $(CHAIN_INFO_PRECOMPILE) "get_supported_chains()" --rpc-url $(CREDITCOIN_RPC_URL)); \
+	decoded=$$(cast decode-abi "get_supported_chains()((uint64,uint64,bytes,uint8)[])" "$$raw"); \
+	echo "  registry          $$decoded"; \
+	if echo "$$decoded" | grep -q "($(CHAIN_KEY), $(CHAIN_KEY_EXPECTS)"; then \
+	  echo "  chain key $(CHAIN_KEY)       resolves to $(CHAIN_KEY_EXPECTS), as configured"; \
+	else \
+	  echo "  chain key $(CHAIN_KEY)       DOES NOT resolve to $(CHAIN_KEY_EXPECTS) on this network"; \
+	  exit 1; fi
+
+# 3. The Creditcoin leg. Reads the two addresses above. The chain key is checked first,
+#    against the live registry, because it is immutable once the ASC is deployed.
+deploy-destination: require-sender verify-chain-key
 	forge script script/deployment/DeployRiyaDestinationChain.s.sol:DeployRiyaDestinationChain $(CREDITCOIN_ARGS) -vvv
 
 # Ordered, and nothing to paste: each step records its addresses under deployments/,

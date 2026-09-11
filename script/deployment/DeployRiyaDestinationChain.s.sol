@@ -66,7 +66,7 @@ contract DeployRiyaDestinationChain is DeploymentRecord {
         helperConfig = new HelperConfigDestination();
         (uint64 chainKey, uint64 sourceChainId, address escrow, address adapter) = helperConfig.activeNetworkConfig();
 
-        // Before spending gas, not after. The key is immutable once the ASC is deployed.
+        // Best effort, and usually a no-op. See `_assertChainKey`.
         _assertChainKey(chainKey, sourceChainId);
 
         address deployer = _broadcaster();
@@ -116,15 +116,33 @@ contract DeployRiyaDestinationChain is DeploymentRecord {
 
     /**
      * @notice Proves the chain key resolves to the source chain the escrow actually lives on.
-     * @dev `RiyaASC` rejects a zero key but cannot tell 1 from 3, and the value is
-     *      immutable. The registry is per-network, so the only reliable check is to ask
-     *      this network what the key means and compare against a chain id, which never moves.
+     * @dev `RiyaASC` rejects a zero key but cannot tell 1 from 3, and the value is immutable.
+     *      The registry is per-network, so the only reliable check is to ask this network what
+     *      the key means and compare against a chain id, which never moves.
+     *
+     *      **This usually does nothing, and that is not a bug.** `forge script` simulates
+     *      locally against fetched state, and `0x0FD3` is native node code with no bytecode to
+     *      fetch, so the call comes back empty and the check is skipped rather than failing the
+     *      deployment. `make verify-chain-key` is what actually enforces it, using `cast call`
+     *      against the node itself, and `deploy-destination` depends on it.
+     *
+     *      The low-level call is deliberate. A high-level one makes forge raise
+     *      "call to non-contract address", which cannot be told apart from a real failure.
      * @param chainKey The key about to be handed to `RiyaASC`.
      * @param expected The EVM chain id it must resolve to.
      */
     function _assertChainKey(uint64 chainKey, uint64 expected) internal view {
-        IChainInfo.ChainInfo[] memory chains = CHAIN_INFO.get_supported_chains();
+        (bool ok, bytes memory data) =
+            address(CHAIN_INFO).staticcall(abi.encodeWithSelector(IChainInfo.get_supported_chains.selector));
 
+        // Empty means the precompile is not reachable from here, not that no chains exist.
+        if (!ok || data.length == 0) return;
+
+        _assertRegistry(abi.decode(data, (IChainInfo.ChainInfo[])), chainKey, expected);
+    }
+
+    /// @dev The comparison itself, separated so it can be tested against a real registry.
+    function _assertRegistry(IChainInfo.ChainInfo[] memory chains, uint64 chainKey, uint64 expected) internal pure {
         for (uint256 i = 0; i < chains.length; i++) {
             if (chains[i].chainKey != chainKey) continue;
 
