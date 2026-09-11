@@ -8,10 +8,7 @@ until you owe nothing.**
 
 You never make a repayment. You never get liquidated. You just wait.
 
-This is a copy of [Alchemix](https://alchemix.fi), which already proved the idea
-works. The new part is that the savings live on **one** chain and the loan lives
-on **another**, and Creditcoin can prove what happened on the first chain without
-trusting anybody.
+Alchemix proved self-repaying debt works on one chain. Riya is the first time the collateral and the debt live on different chains with no bridge and no oracle between them.
 
 ## How it works, with real numbers
 
@@ -62,6 +59,3 @@ Do not discover the length of that wait during the demo. Two mitigations, and I 
 
 - Run the deposit before you start presenting, so collateral is already on Creditcoin when you begin. Demo the harvest leg live, since that is the interesting half anyway.
 - Have a recording of a full run as a fallback.
-
-## Hackathon Judging Criterion
-

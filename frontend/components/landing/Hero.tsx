@@ -28,9 +28,9 @@ export function Hero() {
           </h1>
 
           <p className="mt-7 max-w-xl text-[17px] leading-relaxed text-muted sm:text-[19px]">
-            Put USDC to work on Aave V4 (Ethereum). Borrow against it on
-            Creditcoin. The yield your deposit earns is proven across and
-            quietly retires the debt, until you owe nothing.
+            With no bridge or oracle, put USDC to work on Aave V4 (Ethereum).
+            Borrow against it on Creditcoin. The yield your deposit earns is
+            proven across and quietly retires the debt, until you owe nothing.
           </p>
 
           <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-faint">
