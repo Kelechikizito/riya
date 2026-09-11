@@ -23,7 +23,16 @@ library SharedEnv {
     /// @dev `AaveV4Adapter` on Ethereum.
     address internal constant ADAPTER = 0x0000000000000000000000000000000000ada97e;
 
-    /// @dev Written to `PRIVATE_KEY` by every suite that runs a deploy script, for the same
-    ///      reason the addresses are shared.
+    /// @dev The rest of the address variables the scripts read. Same reasoning: any suite
+    ///      writing these writes the same value, so a race changes nothing.
+    address internal constant MOCK_USD = 0x0000000000000000000000000000000000075d00;
+    address internal constant MOCK_SPOKE = 0x00000000000000000000000000000000000570e0;
+    address internal constant LOAN_LEDGER = 0x000000000000000000000000000000000001eD9E;
+    address internal constant RIYA_USD = 0x0000000000000000000000000000000000075d01;
+    address internal constant RIYA_ASC = 0x0000000000000000000000000000000000000A5c;
+
+    uint256 internal constant MOCK_RESERVE_ID = 3;
+
+    /// @dev Written to `PRIVATE_KEY` by suites that predate the keystore switch.
     uint256 internal constant DEPLOYER_KEY = 0xA11CE;
 }
