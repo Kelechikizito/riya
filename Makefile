@@ -23,7 +23,7 @@ export
         deploy-mocks deploy-source deploy-destination deploy-all addresses verify-addresses verify-chain-key verify-creditcoin clean-deployments \
         deposit accrue harvest source-status sender senders unlock preflight require-sender \
         borrow repay settle position \
-        demo frontend-env frontend-dev frontend-build anvil
+        demo frontend-env frontend-contracts frontend-dev frontend-build anvil
 
 SHELL := /bin/bash
 
@@ -415,6 +415,13 @@ frontend-env:
 	  "NEXT_PUBLIC_YIELD_RATE_BPS=$(if $(YIELD_RATE_BPS),$(YIELD_RATE_BPS),500)" \
 	  > frontend/.env.local
 	@echo "wrote frontend/.env.local"
+
+# Regenerates frontend/lib/contracts/ from `out/` and `deployments/`. Needs `forge build`
+# first. These are the ABIs and addresses the app imports directly, so run it after any
+# contract change or redeployment, and commit the result — the frontend must build without
+# a Foundry toolchain present.
+frontend-contracts:
+	npm --prefix frontend run contracts
 
 frontend-dev: frontend-env
 	npm --prefix frontend run dev
