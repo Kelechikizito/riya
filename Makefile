@@ -51,8 +51,13 @@ SIGNER := --account $(DEPLOYER_ACCOUNT) $(if $(DEPLOYER_ADDRESS),--sender $(DEPL
 # Unset means deploy unverified rather than fail halfway through a broadcast.
 VERIFY := $(if $(ETHERSCAN_API_KEY),--verify --etherscan-api-key $(ETHERSCAN_API_KEY),)
 
-SEPOLIA_ARGS    := --rpc-url $(ETH_SEPOLIA_RPC_URL) --broadcast $(SIGNER) $(VERIFY)
-CREDITCOIN_ARGS := --rpc-url $(CREDITCOIN_RPC_URL) --broadcast $(SIGNER)
+# --slow sends one transaction at a time and waits for each receipt. Required here, not
+# optional: an EIP-7702 delegated EOA is limited to one in-flight transaction with no nonce
+# gaps, and forge's default parallel submission is rejected with
+#   "in-flight transaction limit reached for delegated accounts"
+# Check with: cast code <address>   (a delegated account starts 0xef0100)
+SEPOLIA_ARGS    := --rpc-url $(ETH_SEPOLIA_RPC_URL) --broadcast --slow $(SIGNER) $(VERIFY)
+CREDITCOIN_ARGS := --rpc-url $(CREDITCOIN_RPC_URL) --broadcast --slow $(SIGNER)
 
 # Read-only variants. No broadcast, no keystore unlock, no gas.
 READ_SENDER     := $(if $(DEPLOYER_ADDRESS),--sender $(DEPLOYER_ADDRESS),)
