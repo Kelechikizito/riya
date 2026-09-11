@@ -374,6 +374,10 @@ demo:
 
 # Writes frontend/.env.local from whatever is currently recorded, or from .env if a
 # deployment predates the record. Run after any deploy.
+#
+# YIELD_RATE_BPS is defaulted rather than left blank: the frontend reads it with `?? 500`,
+# which does not fire on an empty string, so an unset variable would become Number("") = 0
+# and every self-repay estimate would read as never.
 frontend-env:
 	@printf '%s\n' \
 	  "NEXT_PUBLIC_LOAN_LEDGER_ADDRESS=$(LOAN_LEDGER_ADDRESS)" \
@@ -384,7 +388,7 @@ frontend-env:
 	  "NEXT_PUBLIC_MOCK_USD_ADDRESS=$(MOCK_USD)" \
 	  "NEXT_PUBLIC_CREDITCOIN_RPC_URL=$(CREDITCOIN_RPC_URL)" \
 	  "NEXT_PUBLIC_SEPOLIA_RPC_URL=$(ETH_SEPOLIA_RPC_URL)" \
-	  "NEXT_PUBLIC_YIELD_RATE_BPS=$(YIELD_RATE_BPS)" \
+	  "NEXT_PUBLIC_YIELD_RATE_BPS=$(if $(YIELD_RATE_BPS),$(YIELD_RATE_BPS),500)" \
 	  > frontend/.env.local
 	@echo "wrote frontend/.env.local"
 
