@@ -21,8 +21,14 @@ import {MockUSD} from "test/mocks/MockUSD.sol";
  *      print them.
  */
 abstract contract SourceChainScript is Script {
-    uint256 internal deployerKey;
+    /// @dev Signed by `--account`; `--sender` is what arrives here.
     address internal deployer;
+
+    /// @dev See `DeploymentRecord._broadcaster`. Tests override this, because
+    ///      `vm.startBroadcast()` sends from forge's default sender rather than the caller.
+    function _broadcaster() internal view virtual returns (address) {
+        return msg.sender;
+    }
 
     MockUSD internal usd;
     MockAaveSpoke internal spoke;
@@ -30,15 +36,23 @@ abstract contract SourceChainScript is Script {
     AaveV4Adapter internal adapter;
     uint256 internal reserveId;
 
-    function _load() internal {
-        deployerKey = vm.envUint("PRIVATE_KEY");
-        deployer = vm.addr(deployerKey);
+    /// @dev Virtual so tests can inject addresses directly. `vm.setEnv` writes the process
+    ///      environment, which test contracts share and forge runs in parallel, so reading
+    ///      these from the environment inside a test races with every other suite.
+    function _load() internal virtual {
+        deployer = _broadcaster();
 
         usd = MockUSD(vm.envAddress("MOCK_USD"));
         spoke = MockAaveSpoke(vm.envAddress("MOCK_SPOKE"));
         reserveId = vm.envUint("MOCK_RESERVE_ID");
         escrow = RiyaEscrow(vm.envAddress("RIYA_ESCROW_ADDRESS"));
         adapter = AaveV4Adapter(vm.envAddress("AAVE_V4_ADAPTER_ADDRESS"));
+    }
+
+    /// @dev The amount to act on, in USDC's 6 decimals. Overridden in tests for the same
+    ///      reason `_load` is.
+    function _amount(uint256 fallbackAmount) internal view virtual returns (uint256) {
+        return vm.envOr("AMOUNT", fallbackAmount);
     }
 }
 
@@ -53,9 +67,9 @@ contract Deposit is SourceChainScript {
     function run() external {
         _load();
 
-        uint256 amount = vm.envOr("AMOUNT", uint256(1_000e6));
+        uint256 amount = _amount(1_000e6);
 
-        vm.startBroadcast(deployerKey);
+        vm.startBroadcast();
 
         usd.mint(deployer, amount);
         IERC20(address(usd)).approve(address(escrow), amount);
@@ -82,9 +96,9 @@ contract AccrueYield is SourceChainScript {
     function run() external {
         _load();
 
-        uint256 amount = vm.envOr("AMOUNT", uint256(100e6));
+        uint256 amount = _amount(100e6);
 
-        vm.startBroadcast(deployerKey);
+        vm.startBroadcast();
 
         usd.mint(deployer, amount);
         IERC20(address(usd)).approve(address(spoke), amount);
@@ -111,7 +125,7 @@ contract Harvest is SourceChainScript {
         console2.log("available :", available);
         console2.log("floor     :", adapter.I_MIN_HARVEST());
 
-        vm.startBroadcast(deployerKey);
+        vm.startBroadcast();
         uint256 harvested = adapter.harvest();
         vm.stopBroadcast();
 

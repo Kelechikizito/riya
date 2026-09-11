@@ -69,15 +69,14 @@ contract DeployRiyaDestinationChain is DeploymentRecord {
         // Before spending gas, not after. The key is immutable once the ASC is deployed.
         _assertChainKey(chainKey, sourceChainId);
 
-        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerKey);
+        address deployer = _broadcaster();
 
         // The token takes this nonce, the ASC the one after, the ledger the one after that.
         // Count deployments between the prediction and the ledger, not contracts in the system.
         uint256 nonce = vm.getNonce(deployer);
         address predictedLedger = vm.computeCreateAddress(deployer, nonce + 2);
 
-        vm.startBroadcast(deployerKey);
+        vm.startBroadcast();
 
         // Both trust the prediction; `predictedLedger` has no code yet.
         riyaUSD = new RiyaUSD(predictedLedger);

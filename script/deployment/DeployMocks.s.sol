@@ -21,9 +21,8 @@ import {MockUSD} from "test/mocks/MockUSD.sol";
  */
 contract DeployMocks is DeploymentRecord {
     function run() external returns (MockUSD usd, MockAaveSpoke spoke, uint256 reserveId) {
-        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
-
-        vm.startBroadcast(deployerKey);
+        // Signed by `--account`, so there is no key in the environment to leak.
+        vm.startBroadcast();
 
         usd = new MockUSD();
         spoke = new MockAaveSpoke();

@@ -15,18 +15,34 @@ import {HelperConfigDestination} from "script/HelperConfigDestination.s.sol";
 import {MockChainInfo} from "test/mocks/MockChainInfo.sol";
 import {SharedEnv} from "test/helpers/SharedEnv.sol";
 
-/// @dev Exposes each script's internal prediction check. A shifted nonce cannot be produced
-///      from outside a script that reads and consumes its own nonces in one call, so the
-///      only way to exercise the revert is to call the check directly.
+/**
+ * @dev Two jobs.
+ *
+ *      It exposes each script's internal prediction check, because a shifted nonce cannot be
+ *      produced from outside a script that reads and consumes its own nonces in one call.
+ *
+ *      It also pins `_broadcaster` to forge's `DEFAULT_SENDER`. Under `forge script --sender`
+ *      that address is both the sender and `msg.sender`, but in a test `vm.startBroadcast()`
+ *      broadcasts from `DEFAULT_SENDER` while `msg.sender` is whoever called `run()`. Without
+ *      the override the script predicts against one address and deploys from another.
+ */
 contract SourceDeployHarness is DeployRiyaSourceChain {
     function assertPrediction(address predicted, address actual) external pure {
         _assertPrediction(predicted, actual);
+    }
+
+    function _broadcaster() internal pure override returns (address) {
+        return DEFAULT_SENDER;
     }
 }
 
 contract DestinationDeployHarness is DeployRiyaDestinationChain {
     function assertPrediction(address predicted, address actual) external pure {
         _assertPrediction(predicted, actual);
+    }
+
+    function _broadcaster() internal pure override returns (address) {
+        return DEFAULT_SENDER;
     }
 }
 
@@ -46,18 +62,14 @@ contract DeployScriptsTest is Test {
     /// @dev The Chain Info Precompile. Same address on every Creditcoin network.
     address constant CHAIN_INFO = 0x0000000000000000000000000000000000000fD3;
 
-    uint256 deployerKey = SharedEnv.DEPLOYER_KEY;
-    address deployer = vm.addr(SharedEnv.DEPLOYER_KEY);
+    /// @dev Whoever `vm.startBroadcast()` sends from in a test. See `SourceDeployHarness`.
+    address deployer = DEFAULT_SENDER;
 
     /// @dev From `SharedEnv`, not `makeAddr`. `vm.setEnv` is process-global and test
     ///      contracts run in parallel, so two suites writing different values to
     ///      `RIYA_ESCROW_ADDRESS` race and fail intermittently.
     address constant escrowOnEthereum = SharedEnv.ESCROW;
     address constant adapterOnEthereum = SharedEnv.ADAPTER;
-
-    function setUp() public {
-        vm.setEnv("PRIVATE_KEY", vm.toString(deployerKey));
-    }
 
     /*//////////////////////////////////////////////////////////////
                               SOURCE CHAIN
@@ -68,7 +80,7 @@ contract DeployScriptsTest is Test {
     function testSourceChainDeployWiresThePairBothWays() external {
         // ARRANGE
         vm.chainId(ANVIL);
-        DeployRiyaSourceChain script = new DeployRiyaSourceChain();
+        SourceDeployHarness script = new SourceDeployHarness();
 
         // ACT
         (AaveV4Adapter adapter, RiyaEscrow escrow, HelperConfig config) = script.run();
@@ -85,7 +97,7 @@ contract DeployScriptsTest is Test {
     function testSourceChainDeployBroadcastsFromTheConfiguredKey() external {
         // ARRANGE
         vm.chainId(ANVIL);
-        DeployRiyaSourceChain script = new DeployRiyaSourceChain();
+        SourceDeployHarness script = new SourceDeployHarness();
 
         // ACT
         (AaveV4Adapter adapter,,) = script.run();
@@ -104,7 +116,7 @@ contract DeployScriptsTest is Test {
         // ARRANGE
         _prepareCreditcoin();
         _registerChain(1, ETH_SEPOLIA);
-        DeployRiyaDestinationChain script = new DeployRiyaDestinationChain();
+        DestinationDeployHarness script = new DestinationDeployHarness();
 
         // ACT
         (RiyaUSD riyaUSD, RiyaASC asc, LoanLedger ledger,) = script.run();
@@ -125,7 +137,7 @@ contract DeployScriptsTest is Test {
         // ARRANGE
         _prepareCreditcoin();
         _registerChain(1, ETH_SEPOLIA);
-        DeployRiyaDestinationChain script = new DeployRiyaDestinationChain();
+        DestinationDeployHarness script = new DestinationDeployHarness();
         (RiyaUSD riyaUSD, RiyaASC asc, LoanLedger ledger,) = script.run();
 
         // ACT
@@ -147,7 +159,7 @@ contract DeployScriptsTest is Test {
         // ARRANGE
         _prepareCreditcoin();
         _registerChain(1, 1); // key 1 resolves to Ethereum Mainnet, not Sepolia
-        DeployRiyaDestinationChain script = new DeployRiyaDestinationChain();
+        DestinationDeployHarness script = new DestinationDeployHarness();
 
         // ACT
         // ASSERT
@@ -167,7 +179,7 @@ contract DeployScriptsTest is Test {
         // ARRANGE
         _prepareCreditcoin();
         _registerChain(3, ETH_SEPOLIA); // the registry knows 3, the config asks for 1
-        DeployRiyaDestinationChain script = new DeployRiyaDestinationChain();
+        DestinationDeployHarness script = new DestinationDeployHarness();
 
         // ACT
         // ASSERT
@@ -184,7 +196,7 @@ contract DeployScriptsTest is Test {
         // ARRANGE
         _prepareCreditcoin();
         _registerChain(1, 1);
-        DeployRiyaDestinationChain script = new DeployRiyaDestinationChain();
+        DestinationDeployHarness script = new DestinationDeployHarness();
         uint256 nonceBefore = vm.getNonce(deployer);
 
         // ACT

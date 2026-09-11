@@ -16,11 +16,18 @@ import {HelperConfigDestination} from "script/HelperConfigDestination.s.sol";
 import {MockChainInfo} from "test/mocks/MockChainInfo.sol";
 import {SharedEnv} from "test/helpers/SharedEnv.sol";
 
-/// @dev Exposes the deploy script's internal chain-key check so it can be driven with keys
-///      the config would never produce.
+/**
+ * @dev Exposes the deploy script's internal chain-key check so it can be driven with keys the
+ *      config would never produce, and pins `_broadcaster` to forge's `DEFAULT_SENDER`, which
+ *      is what `vm.startBroadcast()` sends from inside a test.
+ */
 contract ChainKeyHarness is DeployRiyaDestinationChain {
     function assertChainKey(uint64 chainKey, uint64 expected) external view {
         _assertChainKey(chainKey, expected);
+    }
+
+    function _broadcaster() internal pure override returns (address) {
+        return DEFAULT_SENDER;
     }
 }
 
@@ -70,7 +77,6 @@ contract CreditcoinTestnetForkTest is Test {
     function setUp() public {
         creditCoinRpcUrl = vm.createSelectFork("creditcoin_testnet");
 
-        vm.setEnv("PRIVATE_KEY", vm.toString(SharedEnv.DEPLOYER_KEY));
         vm.setEnv("RIYA_ESCROW_ADDRESS", vm.toString(SharedEnv.ESCROW));
         vm.setEnv("AAVE_V4_ADAPTER_ADDRESS", vm.toString(SharedEnv.ADAPTER));
     }
@@ -226,7 +232,7 @@ contract CreditcoinTestnetForkTest is Test {
     function testDeployScriptRunsAgainstTheLiveRegistryContents() external {
         // ARRANGE
         _seedChainInfoFromLiveRegistry();
-        DeployRiyaDestinationChain script = new DeployRiyaDestinationChain();
+        ChainKeyHarness script = new ChainKeyHarness();
 
         // ACT
         (riyaUSD, asc, ledger,) = script.run();
@@ -281,7 +287,7 @@ contract CreditcoinTestnetForkTest is Test {
     function testTheDeployedSystemFunctionsOnAForkOfCreditcoin() external {
         // ARRANGE
         _seedChainInfoFromLiveRegistry();
-        DeployRiyaDestinationChain script = new DeployRiyaDestinationChain();
+        ChainKeyHarness script = new ChainKeyHarness();
         (riyaUSD, asc, ledger,) = script.run();
 
         // ACT

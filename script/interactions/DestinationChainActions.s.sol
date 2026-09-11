@@ -17,20 +17,37 @@ import {RiyaUSD} from "src/destination-chain/RiyaUSD.sol";
  *      the point: `borrow` reverts with `LoanLedger__ExceedsLimit` when no proof exists.
  */
 abstract contract DestinationChainScript is Script {
-    uint256 internal userKey;
+    /// @dev Signed by `--account`; `--sender` is what arrives here.
     address internal user;
+
+    /// @dev See `DeploymentRecord._broadcaster`. Tests override this, because
+    ///      `vm.startBroadcast()` sends from forge's default sender rather than the caller.
+    function _broadcaster() internal view virtual returns (address) {
+        return msg.sender;
+    }
 
     LoanLedger internal ledger;
     RiyaUSD internal riyaUSD;
     RiyaASC internal asc;
 
-    function _load() internal {
-        userKey = vm.envUint("PRIVATE_KEY");
-        user = vm.addr(userKey);
+    /// @dev Virtual so tests can inject addresses directly, rather than through the shared
+    ///      process environment that every parallel test suite writes to.
+    function _load() internal virtual {
+        user = _broadcaster();
 
         ledger = LoanLedger(vm.envAddress("LOAN_LEDGER_ADDRESS"));
         riyaUSD = RiyaUSD(vm.envAddress("RIYA_USD_ADDRESS"));
         asc = RiyaASC(vm.envAddress("RIYA_ASC_ADDRESS"));
+    }
+
+    /// @dev The amount to act on, in USDC's 6 decimals.
+    function _amount(uint256 fallbackAmount) internal view virtual returns (uint256) {
+        return vm.envOr("AMOUNT", fallbackAmount);
+    }
+
+    /// @dev Whose position to read. Only `Position` uses it.
+    function _target() internal view virtual returns (address) {
+        return vm.envOr("USER", user);
     }
 }
 
@@ -43,14 +60,14 @@ contract Borrow is DestinationChainScript {
     function run() external {
         _load();
 
-        uint256 amount = vm.envOr("AMOUNT", uint256(100e6));
+        uint256 amount = _amount(100e6);
         uint256 limit = (ledger.s_collateral(user) * ledger.maxLtvBps(user)) / 10_000;
 
         console2.log("collateral:", ledger.s_collateral(user));
         console2.log("limit     :", limit);
         console2.log("borrowing :", amount);
 
-        vm.startBroadcast(userKey);
+        vm.startBroadcast();
         ledger.borrow(amount);
         vm.stopBroadcast();
 
@@ -68,11 +85,11 @@ contract Repay is DestinationChainScript {
     function run() external {
         _load();
 
-        uint256 amount = vm.envOr("AMOUNT", uint256(10e6));
+        uint256 amount = _amount(10e6);
 
         console2.log("debt before:", ledger.s_debt(user));
 
-        vm.startBroadcast(userKey);
+        vm.startBroadcast();
         ledger.repay(amount);
         vm.stopBroadcast();
 
@@ -93,7 +110,7 @@ contract Settle is DestinationChainScript {
 
         console2.log("pending before:", ledger.pendingYield(user));
 
-        vm.startBroadcast(userKey);
+        vm.startBroadcast();
         ledger.repay(1);
         vm.stopBroadcast();
 
@@ -107,7 +124,7 @@ contract Position is DestinationChainScript {
     function run() external {
         _load();
 
-        address target = vm.envOr("USER", user);
+        address target = _target();
 
         console2.log("user          :", target);
         console2.log("collateral    :", ledger.s_collateral(target));

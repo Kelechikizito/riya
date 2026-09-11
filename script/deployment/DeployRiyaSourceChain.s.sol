@@ -48,14 +48,13 @@ contract DeployRiyaSourceChain is DeploymentRecord {
         helperConfig = new HelperConfig();
         (address spoke, uint256 reserveId, uint256 minHarvest, uint256 minDeposit) = helperConfig.activeNetworkConfig();
 
-        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerKey);
+        address deployer = _broadcaster();
 
         // The adapter takes this nonce; the escrow takes the one after it.
         uint256 nonce = vm.getNonce(deployer);
         address predictedEscrow = vm.computeCreateAddress(deployer, nonce + 1);
 
-        vm.startBroadcast(deployerKey);
+        vm.startBroadcast();
 
         // Trusts the prediction — `predictedEscrow` has no code yet.
         adapter = new AaveV4Adapter(predictedEscrow, IAaveV4Spoke(spoke), reserveId, minHarvest);
@@ -70,6 +69,11 @@ contract DeployRiyaSourceChain is DeploymentRecord {
 
         _record("AAVE_V4_ADAPTER_ADDRESS", address(adapter));
         _record("RIYA_ESCROW_ADDRESS", address(escrow));
+
+        // The worker scans from here. Its default is block 0, and scanning Sepolia from
+        // genesis takes hours to reach an event that cannot exist before this block.
+        _record("WORKER_START_BLOCK", block.number);
+
         _save("source");
 
         console2.log("deployer :", deployer);

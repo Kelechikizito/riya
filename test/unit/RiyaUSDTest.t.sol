@@ -103,7 +103,7 @@ contract RiyaUSDTest is Test {
 
         // ACT
         vm.prank(alice);
-        riyaUSD.transfer(makeAddr("bob"), 30e6);
+        assertTrue(riyaUSD.transfer(makeAddr("bob"), 30e6));
 
         // ASSERT
         assertEq(riyaUSD.balanceOf(alice), 70e6);

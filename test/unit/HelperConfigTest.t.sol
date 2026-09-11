@@ -83,16 +83,16 @@ contract HelperConfigTest is Test {
     function testSepoliaConfigReadsTheMockFromEnv() external {
         // ARRANGE
         vm.chainId(ETH_SEPOLIA);
-        vm.setEnv("MOCK_SPOKE", vm.toString(SharedEnv.ADAPTER));
-        vm.setEnv("MOCK_RESERVE_ID", "3");
+        vm.setEnv("MOCK_SPOKE", vm.toString(SharedEnv.MOCK_SPOKE));
+        vm.setEnv("MOCK_RESERVE_ID", vm.toString(SharedEnv.MOCK_RESERVE_ID));
 
         // ACT
         HelperConfig config = new HelperConfig();
         (address spoke, uint256 reserveId, uint256 minHarvest, uint256 minDeposit) = config.activeNetworkConfig();
 
         // ASSERT
-        assertEq(spoke, adapter);
-        assertEq(reserveId, 3);
+        assertEq(spoke, SharedEnv.MOCK_SPOKE);
+        assertEq(reserveId, SharedEnv.MOCK_RESERVE_ID);
         assertEq(minHarvest, 10e6, "thresholds match the live chains");
         assertEq(minDeposit, 100e6);
     }
