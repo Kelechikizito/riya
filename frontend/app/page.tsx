@@ -7,6 +7,8 @@ import { CreditLadder } from "@/components/landing/CreditLadder";
 import { Onboarding } from "@/components/landing/Onboarding";
 import { Roadmap } from "@/components/landing/Roadmap";
 import { Risks } from "@/components/landing/Risks";
+import { Deployed } from "@/components/landing/Deployed";
+import { SupportedAssets } from "@/components/landing/SupportedAssets";
 import { DocsCta } from "@/components/landing/DocsCta";
 
 export default function Home() {
@@ -17,10 +19,12 @@ export default function Home() {
         <Hero />
         <HowItWorks />
         <WhyCreditcoin />
+        <SupportedAssets />
         <CreditLadder />
         <Onboarding />
         <Roadmap />
         <Risks />
+        <Deployed />
         <DocsCta />
       </main>
       <SiteFooter />

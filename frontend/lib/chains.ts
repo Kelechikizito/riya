@@ -44,6 +44,18 @@ export const SOURCE_CHAIN = {
 export const BLOCK_PROVER_PRECOMPILE = "0x0FD2" as const;
 
 /**
+ * Aave V4 in production. It is deployed on Ethereum Mainnet and nowhere else, which is why
+ * the demo runs against a stand-in on Sepolia. Quoted so the claim can be checked rather
+ * than taken: this is the venue riya's yield actually comes from.
+ */
+export const AAVE_V4 = {
+  spoke: "0x94e7A5dCbE816e498b89aB752661904E2F56c485",
+  /** USDC's index on that Spoke, confirmed on-chain. */
+  usdcReserveId: 7,
+  explorer: "https://etherscan.io",
+} as const;
+
+/**
  * Attestcoin's per-network chain keys. Creditcoin testnet numbers Sepolia as 1
  * and Ethereum mainnet as 3; Creditcoin mainnet numbers Ethereum mainnet as 1.
  */

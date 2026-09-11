@@ -263,6 +263,39 @@ export const mockUsdAbi = [
   },
 ] as const;
 
+/** The adapter's live position on Ethereum. Read-only, and the source of every number
+ *  in the supported-assets section. */
+export const aaveV4AdapterAbi = [
+  {
+    type: "function",
+    name: "s_principal",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "totalAssets",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "yieldAccrued",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "I_MIN_HARVEST",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
+
 export const erc20Abi = [
   {
     type: "function",
