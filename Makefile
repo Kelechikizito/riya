@@ -21,18 +21,35 @@ export
         test test-unit test-fuzz test-integration test-fork test-local coverage coverage-report \
         offchain-install offchain-typecheck offchain-test offchain-abi worker keeper worker-once worker-dead keeper-once \
         deploy-mocks deploy-source deploy-destination deploy-all addresses verify-addresses clean-deployments \
-        deposit accrue harvest source-status \
+        deposit accrue harvest source-status sender senders preflight require-sender \
         borrow repay settle position \
         demo frontend-env frontend-dev frontend-build anvil
 
 SHELL := /bin/bash
 
-SEPOLIA_ARGS  := --rpc-url $(ETH_SEPOLIA_RPC_URL) --broadcast --private-key $(PRIVATE_KEY)
-CREDITCOIN_ARGS := --rpc-url $(CREDITCOIN_RPC_URL) --broadcast --private-key $(PRIVATE_KEY)
+# Keys live in Foundry's encrypted keystore, never in .env and never in a process list.
+# Import once with:  cast wallet import <name> --interactive
+DEPLOYER_ACCOUNT := sepolia-acc
+KEEPER_ACCOUNT   := riya-keeper
+WORKER_ACCOUNT   := readability-worker
 
-# Read-only variants. No broadcast, no key spent, no gas.
-SEPOLIA_READ  := --rpc-url $(ETH_SEPOLIA_RPC_URL)
-CREDITCOIN_READ := --rpc-url $(CREDITCOIN_RPC_URL)
+# `--sender` is required alongside `--account`: forge needs the address during simulation,
+# before it unlocks the keystore, and the deploy scripts predict nonces against it. Get it
+# with `make sender` and put DEPLOYER_ADDRESS in .env.
+SIGNER := --account $(DEPLOYER_ACCOUNT) $(if $(DEPLOYER_ADDRESS),--sender $(DEPLOYER_ADDRESS),)
+
+# Verification is source-chain only, and the key is passed explicitly rather than left to
+# foundry.toml's ${ETHERSCAN_API_KEY} placeholder, which `forge config` shows unresolved.
+# Unset means deploy unverified rather than fail halfway through a broadcast.
+VERIFY := $(if $(ETHERSCAN_API_KEY),--verify --etherscan-api-key $(ETHERSCAN_API_KEY),)
+
+SEPOLIA_ARGS    := --rpc-url $(ETH_SEPOLIA_RPC_URL) --broadcast $(SIGNER) $(VERIFY)
+CREDITCOIN_ARGS := --rpc-url $(CREDITCOIN_RPC_URL) --broadcast $(SIGNER)
+
+# Read-only variants. No broadcast, no keystore unlock, no gas.
+READ_SENDER     := $(if $(DEPLOYER_ADDRESS),--sender $(DEPLOYER_ADDRESS),)
+SEPOLIA_READ    := --rpc-url $(ETH_SEPOLIA_RPC_URL) $(READ_SENDER)
+CREDITCOIN_READ := --rpc-url $(CREDITCOIN_RPC_URL) $(READ_SENDER)
 
 SOURCE_ACTIONS := script/interactions/SourceChainActions.s.sol
 DEST_ACTIONS   := script/interactions/DestinationChainActions.s.sol
@@ -47,6 +64,9 @@ help:
 	@echo "  sepolia    deposit  accrue  harvest  source-status"
 	@echo "  creditcoin borrow  repay  settle  position"
 	@echo "  demo       demo  frontend-env  frontend-dev"
+	@echo ""
+	@echo "  Keys come from the Foundry keystore: $(DEPLOYER_ACCOUNT), $(KEEPER_ACCOUNT), $(WORKER_ACCOUNT)."
+	@echo "  Run 'make senders' once and put the three addresses in .env."
 	@echo ""
 	@echo "  Amounts are in USDC's 6 decimals. Override with AMOUNT=..., e.g."
 	@echo "    make deposit AMOUNT=500000000     # \$$500"
@@ -124,42 +144,86 @@ offchain-typecheck:
 offchain-test:
 	npm --prefix offchain test
 
+# The off-chain programs are TypeScript and cannot read Foundry's keystore, so the key is
+# decrypted here and handed over for the life of the process. It never reaches .env and
+# never reaches disk. Each of these prompts for the keystore password.
+WORKER_KEY = WORKER_PRIVATE_KEY=$$(cast wallet decrypt-keystore $(WORKER_ACCOUNT) | awk '{print $$NF}')
+KEEPER_KEY = KEEPER_PRIVATE_KEY=$$(cast wallet decrypt-keystore $(KEEPER_ACCOUNT) | awk '{print $$NF}')
+
 # The readability worker. Watches Sepolia, waits for attestation, proves to RiyaASC.
 worker:
-	npm --prefix offchain run worker
+	@$(WORKER_KEY) npm --prefix offchain run worker
 
 # Prove one transaction and exit. TX=0x...
 worker-once:
-	npm --prefix offchain run worker -- --once $(TX)
+	@$(WORKER_KEY) npm --prefix offchain run worker -- --once $(TX)
 
-# List events the worker gave up on, and why.
+# Reads the local store only, so it needs no key.
 worker-dead:
 	npm --prefix offchain run worker -- --dead
 
 # The keeper. Polls yieldAccrued() and calls harvest() when it clears the floor.
+# Its default interval is five minutes, which is too slow to watch. For a demo:
+#   make keeper KEEPER_POLL_INTERVAL_MS=15000
 keeper:
-	npm --prefix offchain run keeper
+	@$(KEEPER_KEY) npm --prefix offchain run keeper
 
 keeper-once:
-	npm --prefix offchain run keeper -- --once
+	@$(KEEPER_KEY) npm --prefix offchain run keeper -- --once
 
 # ---------------------------------------------------------------------------
 # Deployment
 # ---------------------------------------------------------------------------
 
+# The deployer's address, for DEPLOYER_ADDRESS in .env. Prompts for the password.
+sender:
+	@cast wallet address --account $(DEPLOYER_ACCOUNT)
+
+# All three, for .env. Three prompts. Only the deployer's is load-bearing; the other two
+# exist so `preflight` can check that the keeper and worker are funded.
+senders:
+	@printf "DEPLOYER_ADDRESS=%s\n" "$$(cast wallet address --account $(DEPLOYER_ACCOUNT))"
+	@printf "KEEPER_ADDRESS=%s\n"   "$$(cast wallet address --account $(KEEPER_ACCOUNT))"
+	@printf "WORKER_ADDRESS=%s\n"   "$$(cast wallet address --account $(WORKER_ACCOUNT))"
+
+# Every broadcasting target depends on this. Without --sender, forge simulates as its own
+# default address and the nonce prediction points at a contract nobody deploys.
+require-sender:
+	@if [ -z "$(DEPLOYER_ADDRESS)" ]; then \
+	  echo "DEPLOYER_ADDRESS is not set."; \
+	  echo "Run 'make sender' and put the address in .env, then try again."; \
+	  exit 1; fi
+
+# Everything that has to be true before spending gas. Costs nothing.
+preflight:
+	@if [ -z "$(DEPLOYER_ADDRESS)" ]; then echo "  DEPLOYER_ADDRESS  missing   run: make sender"; \
+	  else echo "  DEPLOYER_ADDRESS  $(DEPLOYER_ADDRESS)"; fi
+	@if [ -z "$(ETHERSCAN_API_KEY)" ]; then echo "  ETHERSCAN_API_KEY missing   source contracts will deploy unverified"; \
+	  else echo "  ETHERSCAN_API_KEY set"; fi
+	@if [ -n "$(DEPLOYER_ADDRESS)" ]; then \
+	  echo "  deployer sepolia  $$(cast balance $(DEPLOYER_ADDRESS) --rpc-url $(ETH_SEPOLIA_RPC_URL) --ether 2>/dev/null || echo unreachable) ETH"; \
+	  echo "  deployer cc       $$(cast balance $(DEPLOYER_ADDRESS) --rpc-url $(CREDITCOIN_RPC_URL) --ether 2>/dev/null || echo unreachable) tCTC"; fi
+	@if [ -z "$(KEEPER_ADDRESS)" ]; then echo "  keeper            unknown     run: make senders"; \
+	  else echo "  keeper sepolia    $$(cast balance $(KEEPER_ADDRESS) --rpc-url $(ETH_SEPOLIA_RPC_URL) --ether 2>/dev/null || echo unreachable) ETH   pays for harvest"; fi
+	@if [ -z "$(WORKER_ADDRESS)" ]; then echo "  worker            unknown     run: make senders"; \
+	  else echo "  worker cc         $$(cast balance $(WORKER_ADDRESS) --rpc-url $(CREDITCOIN_RPC_URL) --ether 2>/dev/null || echo unreachable) tCTC  pays for proofs"; fi
+	@cast wallet list 2>/dev/null | grep -qx "$(DEPLOYER_ACCOUNT) (Local)" \
+	  && echo "  keystore          $(DEPLOYER_ACCOUNT), $(KEEPER_ACCOUNT), $(WORKER_ACCOUNT)" \
+	  || echo "  keystore          $(DEPLOYER_ACCOUNT) NOT FOUND"
+
 # 1. Sepolia stand-ins for USDC and the Aave V4 Spoke. Aave V4 is mainnet-only.
 #    Put MOCK_USD, MOCK_SPOKE and MOCK_RESERVE_ID in .env afterwards.
-deploy-mocks:
+deploy-mocks: require-sender
 	forge script script/deployment/DeployMocks.s.sol:DeployMocks $(SEPOLIA_ARGS) -vvv
 
 # 2. The Ethereum leg. Reads MOCK_SPOKE / MOCK_RESERVE_ID from .env.
 #    Put RIYA_ESCROW_ADDRESS and AAVE_V4_ADAPTER_ADDRESS in .env afterwards.
-deploy-source:
+deploy-source: require-sender
 	forge script script/deployment/DeployRiyaSourceChain.s.sol:DeployRiyaSourceChain $(SEPOLIA_ARGS) -vvv
 
 # 3. The Creditcoin leg. Reads the two addresses above, and asserts the chain key
 #    against the live registry before spending any gas.
-deploy-destination:
+deploy-destination: require-sender
 	forge script script/deployment/DeployRiyaDestinationChain.s.sol:DeployRiyaDestinationChain $(CREDITCOIN_ARGS) -vvv
 
 # Ordered, and nothing to paste: each step records its addresses under deployments/,
@@ -211,15 +275,15 @@ clean-deployments:
 # ---------------------------------------------------------------------------
 
 # Mint demo dollars and deposit. Emits the event the worker proves. Min $100.
-deposit:
+deposit: require-sender
 	forge script $(SOURCE_ACTIONS):Deposit $(SEPOLIA_ARGS) -vvv
 
 # The demo's clock. Yield does not accrue with time on a mock reserve.
-accrue:
+accrue: require-sender
 	forge script $(SOURCE_ACTIONS):AccrueYield $(SEPOLIA_ARGS) -vvv
 
 # Move yield into the escrow. Emits TokensHarvested. The keeper also does this.
-harvest:
+harvest: require-sender
 	forge script $(SOURCE_ACTIONS):Harvest $(SEPOLIA_ARGS) -vvv
 
 source-status:
@@ -230,14 +294,14 @@ source-status:
 # ---------------------------------------------------------------------------
 
 # Fails until a deposit proof has landed. That is the design, not a bug.
-borrow:
+borrow: require-sender
 	forge script $(DEST_ACTIONS):Borrow $(CREDITCOIN_ARGS) -vvv
 
-repay:
+repay: require-sender
 	forge script $(DEST_ACTIONS):Repay $(CREDITCOIN_ARGS) -vvv
 
 # Settlement is lazy. This touches the position so proven yield is applied.
-settle:
+settle: require-sender
 	forge script $(DEST_ACTIONS):Settle $(CREDITCOIN_ARGS) -vvv
 
 # Read a position. USER=0x... to inspect someone else's.
