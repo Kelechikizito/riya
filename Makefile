@@ -23,7 +23,7 @@ export
         deploy-mocks deploy-source deploy-destination deploy-all addresses verify-addresses verify-chain-key verify-creditcoin clean-deployments \
         deposit accrue harvest source-status sender senders unlock preflight require-sender \
         borrow repay settle position \
-        demo frontend-env frontend-contracts frontend-dev frontend-build anvil
+        demo frontend-env frontend-contracts frontend-e2e frontend-dev frontend-build anvil
 
 SHELL := /bin/bash
 
@@ -422,6 +422,11 @@ frontend-env:
 # a Foundry toolchain present.
 frontend-contracts:
 	npm --prefix frontend run contracts
+
+# Drives a real build against the live deployment: the generated addresses are inlined at
+# build time, so this is the only way to test what the demo actually runs.
+frontend-e2e:
+	npm --prefix frontend run e2e
 
 frontend-dev: frontend-env
 	npm --prefix frontend run dev
