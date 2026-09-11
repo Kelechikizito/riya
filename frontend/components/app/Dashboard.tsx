@@ -3,8 +3,7 @@
 import { useMemo, useState } from "react";
 import { ConnectButton } from "@/components/site/ConnectButton";
 import { parseUnits } from "viem";
-import { useWriteContract } from "wagmi";
-import { ADDRESSES, ASSUMED_YIELD_RATE_BPS, loanLedgerAbi } from "@/lib/contracts";
+import { ASSUMED_YIELD_RATE_BPS } from "@/lib/contracts";
 import {
   ASSET_DECIMALS,
   formatDuration,
@@ -16,6 +15,8 @@ import { SCORE_TIERS, tierForScore } from "@/lib/score";
 import { effectiveDebt, usePosition } from "@/lib/usePosition";
 import { useActivity, type ActivityEvent } from "@/lib/useActivity";
 import { useDeposit } from "@/lib/useDeposit";
+import { useLedgerActions } from "@/lib/useLedger";
+import { useHarvest } from "@/lib/useHarvest";
 
 export function Dashboard() {
   const { position, live, connected } = usePosition();
@@ -133,13 +134,19 @@ export function Dashboard() {
       {/* --------------------------------------------------------- second row */}
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_1.1fr]">
         <ScoreCard score={Number(position.score)} tierLabel={tier.label} />
-        <BorrowPanel available={available} live={live} />
+        <BorrowPanel
+          available={available}
+          connected={connected}
+          rUsdBalance={position.rUsdBalance}
+          pendingYield={position.pendingYield}
+        />
         <ActivityFeed />
       </div>
 
       {/* ---------------------------------------------------------- third row */}
-      <div className="mt-4">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <DepositPanel />
+        <HarvestPanel />
       </div>
     </div>
   );
@@ -250,10 +257,27 @@ function ScoreCard({ score, tierLabel }: { score: number; tierLabel: string }) {
   );
 }
 
-function BorrowPanel({ available, live }: { available: bigint; live: boolean }) {
+/** What each stage of a write is called in the UI. Shared so the two panels agree. */
+const TX_LABEL: Record<string, string> = {
+  switching: "Switch network…",
+  signing: "Confirm in wallet…",
+  mining: "Waiting for the block…",
+};
+
+function BorrowPanel({
+  available,
+  connected,
+  rUsdBalance,
+  pendingYield,
+}: {
+  available: bigint;
+  connected: boolean;
+  rUsdBalance: bigint;
+  pendingYield: bigint;
+}) {
   const [mode, setMode] = useState<"borrow" | "repay">("borrow");
   const [amount, setAmount] = useState("");
-  const { writeContract, isPending, error } = useWriteContract();
+  const { tx, available: deployed, borrow, repay, settle } = useLedgerActions();
 
   const parsed = useMemo(() => {
     if (!amount) return null;
@@ -265,17 +289,15 @@ function BorrowPanel({ available, live }: { available: bigint; live: boolean }) 
   }, [amount]);
 
   const overLimit = mode === "borrow" && parsed !== null && parsed > available;
+  // `repay` burns the caller's own rUSD, so the wallet has to hold what it offers to pay.
+  // The contract clamps the amount to the debt, but `_burn` does not clamp to the balance.
+  const overBalance = mode === "repay" && parsed !== null && parsed > rUsdBalance;
   const canSubmit =
-    live && Boolean(ADDRESSES.loanLedger) && parsed !== null && parsed > 0n && !overLimit;
+    connected && deployed && parsed !== null && parsed > 0n && !overLimit && !overBalance;
 
   function submit() {
-    if (!canSubmit || !ADDRESSES.loanLedger || parsed === null) return;
-    writeContract({
-      address: ADDRESSES.loanLedger,
-      abi: loanLedgerAbi,
-      functionName: mode,
-      args: [parsed],
-    });
+    if (!canSubmit || parsed === null) return;
+    void (mode === "borrow" ? borrow(parsed) : repay(parsed));
   }
 
   return (
@@ -324,30 +346,54 @@ function BorrowPanel({ available, live }: { available: bigint; live: boolean }) 
           Above your current limit. Let yield retire more debt to raise it.
         </p>
       )}
-      {error && (
+      {overBalance && (
         <p className="mt-2.5 text-[12px] text-danger">
-          {error.message.split("\n")[0]}
+          You hold {formatUsd(rUsdBalance)} of rUSD. Repayment burns your own tokens.
         </p>
       )}
+      {tx.status === "done" && (
+        <p className="mt-2.5 text-[12px] text-yield-300">Confirmed.</p>
+      )}
+      {tx.error && <p className="mt-2.5 text-[12px] text-danger">{tx.error}</p>}
 
       <button
         type="button"
         onClick={submit}
-        disabled={!canSubmit || isPending}
+        disabled={!canSubmit || tx.busy}
         className="mt-auto w-full cursor-pointer rounded-full bg-yield-300 px-5 py-3 pt-3 text-sm font-medium text-void transition-colors duration-200 hover:bg-yield-200 disabled:cursor-not-allowed disabled:bg-line disabled:text-faint"
       >
-        {isPending
-          ? "Confirm in wallet…"
-          : live
-            ? `${mode === "borrow" ? "Borrow" : "Repay"} rUSD`
-            : "Awaiting deployment"}
+        {tx.busy
+          ? TX_LABEL[tx.status]
+          : !deployed
+            ? "Awaiting deployment"
+            : !connected
+              ? "Connect a wallet"
+              : `${mode === "borrow" ? "Borrow" : "Repay"} rUSD`}
       </button>
 
-      {!live && (
+      {/* Settlement is lazy: a proven harvest sits in `pendingYield` until the borrower
+          next touches the ledger. Without this the demo's best moment — the proof landing
+          and the debt falling — needs an unrelated transaction to become visible. */}
+      {pendingYield > 0n && (
+        <button
+          type="button"
+          onClick={() => void settle()}
+          disabled={tx.busy || !deployed}
+          className="mt-2 w-full cursor-pointer rounded-full border border-line px-5 py-2.5 text-[13px] text-muted transition-colors duration-200 hover:border-yield-300/50 hover:text-ink disabled:cursor-not-allowed disabled:text-faint"
+        >
+          Apply {formatUsd(pendingYield)} of proven yield
+        </button>
+      )}
+
+      {!deployed ? (
         <p className="mt-3 text-center text-[11px] leading-relaxed text-faint">
           Enabled once LoanLedger is deployed and its address is set.
         </p>
-      )}
+      ) : !connected ? (
+        <p className="mt-3 text-center text-[11px] leading-relaxed text-faint">
+          Borrowing happens on Creditcoin. Connecting switches the network for you.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -557,6 +603,68 @@ function ActivityFeed() {
       <p className="mt-6 text-[11px] leading-relaxed text-faint">
         Every entry corresponds to an Ethereum transaction that Creditcoin
         verified itself. Nothing here is asserted by riya.
+      </p>
+    </div>
+  );
+}
+
+
+/**
+ * The Ethereum half of the loop, and the only write that is not about the caller.
+ *
+ * `harvest()` is permissionless and pays its caller nothing, so this button is someone
+ * spending their own gas to move everyone's yield. That is worth surfacing rather than
+ * hiding behind a keeper: if riya's operator disappears, the loans keep repaying
+ * themselves, and a button anyone can press is the proof.
+ */
+function HarvestPanel() {
+  const { tx, available, floor, ready, harvest } = useHarvest();
+
+  return (
+    <div className="card flex flex-col p-6">
+      <p className="eyebrow">Ethereum</p>
+      <h2 className="mt-3 text-lg font-semibold">Harvest the yield</h2>
+      <p className="mt-2 text-[13px] leading-relaxed text-muted">
+        Aave rebases silently. Harvesting turns that into one transaction Creditcoin can
+        prove — which is the only way the loan learns it earned anything.
+      </p>
+
+      <div className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-5">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.14em] text-faint">Accrued</p>
+          <p className="mt-1 font-mono text-lg tabular text-yield-300">
+            {formatUsd(available)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.14em] text-faint">Floor</p>
+          <p className="mt-1 font-mono text-lg tabular text-muted">{formatUsd(floor)}</p>
+        </div>
+      </div>
+
+      {!ready && (
+        <p className="mt-4 text-[12px] leading-relaxed text-faint">
+          Below the floor, so the adapter would revert rather than spend gas on dust.
+        </p>
+      )}
+      {tx.status === "done" && (
+        <p className="mt-4 text-[12px] text-yield-300">
+          Harvested. The worker proves it onto Creditcoin next.
+        </p>
+      )}
+      {tx.error && <p className="mt-4 text-[12px] text-danger">{tx.error}</p>}
+
+      <button
+        type="button"
+        onClick={() => void harvest()}
+        disabled={!ready || tx.busy}
+        className="mt-auto w-full cursor-pointer rounded-full border border-yield-300/40 px-5 py-3 text-sm font-medium text-yield-300 transition-colors duration-200 hover:bg-yield-300 hover:text-void disabled:cursor-not-allowed disabled:border-line disabled:text-faint disabled:hover:bg-transparent"
+      >
+        {tx.busy ? TX_LABEL[tx.status] : "Harvest"}
+      </button>
+
+      <p className="mt-3 text-center text-[11px] leading-relaxed text-faint">
+        Anyone may call this. It pays the caller nothing.
       </p>
     </div>
   );

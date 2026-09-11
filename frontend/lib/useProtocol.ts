@@ -1,7 +1,7 @@
 "use client";
 
 import { useReadContracts } from "wagmi";
-import { ADDRESSES, isLive, loanLedgerAbi } from "./contracts";
+import { ADDRESSES, isLive, loanLedgerAbi, riyaUsdAbi } from "./contracts";
 import { DEMO_PROTOCOL } from "./demo";
 
 export type Protocol = {
@@ -13,6 +13,15 @@ export type Protocol = {
   protocolFees: bigint;
   /** Yield distributed per unit of collateral, ever. Scaled by 1e18. */
   yieldPerShare: bigint;
+  /**
+   * Every rUSD in existence.
+   *
+   * Deliberately not equal to outstanding debt: settlement from proven yield lowers a
+   * borrower's `s_debt` without burning the tokens they already spent, so supply is
+   * outstanding debt plus debt retired by yield. Showing both is what makes that visible
+   * rather than looking like an accounting error.
+   */
+  rUsdSupply: bigint;
 };
 
 export type ProtocolState = {
@@ -32,21 +41,22 @@ export function useProtocol(): ProtocolState {
       { ...ledgerContract, functionName: "s_totalCollateral" },
       { ...ledgerContract, functionName: "s_protocolFees" },
       { ...ledgerContract, functionName: "s_yieldPerShare" },
+      { address: ADDRESSES.riyaUsd!, abi: riyaUsdAbi, functionName: "totalSupply" },
     ],
-    query: { enabled: Boolean(ledger), refetchInterval: 15_000 },
+    query: { enabled: Boolean(ledger && ADDRESSES.riyaUsd), refetchInterval: 15_000 },
   });
 
   if (!data) {
     return {
-      protocol: { ...DEMO_PROTOCOL, yieldPerShare: 0n },
+      protocol: { ...DEMO_PROTOCOL, yieldPerShare: 0n, rUsdSupply: 0n },
       live: false,
       loading: isLive() && isLoading,
     };
   }
 
-  const [totalCollateral, protocolFees, yieldPerShare] = data;
+  const [totalCollateral, protocolFees, yieldPerShare, rUsdSupply] = data;
   return {
-    protocol: { totalCollateral, protocolFees, yieldPerShare },
+    protocol: { totalCollateral, protocolFees, yieldPerShare, rUsdSupply },
     live: true,
     loading: isLoading,
   };
