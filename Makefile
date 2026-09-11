@@ -20,7 +20,7 @@ export
 .PHONY: help install build fmt fmt-check lint clean snapshot \
         test test-unit test-fuzz test-integration test-fork test-local coverage coverage-report \
         offchain-install offchain-typecheck offchain-test offchain-abi worker keeper worker-once worker-dead keeper-once \
-        deploy-mocks deploy-source deploy-destination deploy-all addresses verify-addresses verify-chain-key clean-deployments \
+        deploy-mocks deploy-source deploy-destination deploy-all addresses verify-addresses verify-chain-key verify-creditcoin clean-deployments \
         deposit accrue harvest source-status sender senders unlock preflight require-sender \
         borrow repay settle position \
         demo frontend-env frontend-dev frontend-build anvil
@@ -56,8 +56,13 @@ VERIFY := $(if $(ETHERSCAN_API_KEY),--verify --etherscan-api-key $(ETHERSCAN_API
 # gaps, and forge's default parallel submission is rejected with
 #   "in-flight transaction limit reached for delegated accounts"
 # Check with: cast code <address>   (a delegated account starts 0xef0100)
+# Creditcoin is a Blockscout chain, so it needs its own verifier rather than Etherscan's.
+# No API key: Blockscout does not require one.
+BLOCKSCOUT_URL := https://creditcoin-testnet.blockscout.com/api
+CC_VERIFY      := --verify --verifier blockscout --verifier-url $(BLOCKSCOUT_URL)
+
 SEPOLIA_ARGS    := --rpc-url $(ETH_SEPOLIA_RPC_URL) --broadcast --slow $(SIGNER) $(VERIFY)
-CREDITCOIN_ARGS := --rpc-url $(CREDITCOIN_RPC_URL) --broadcast --slow $(SIGNER)
+CREDITCOIN_ARGS := --rpc-url $(CREDITCOIN_RPC_URL) --broadcast --slow $(SIGNER) $(CC_VERIFY)
 
 # Read-only variants. No broadcast, no keystore unlock, no gas.
 READ_SENDER     := $(if $(DEPLOYER_ADDRESS),--sender $(DEPLOYER_ADDRESS),)
@@ -74,7 +79,7 @@ help:
 	@echo "  test       test  test-unit  test-fuzz  test-integration  test-fork  test-local  coverage"
 	@echo "  offchain   offchain-install  offchain-abi  offchain-test  worker  keeper"
 	@echo "  deploy     deploy-mocks  deploy-source  deploy-destination  addresses  verify-addresses"
-	@echo "             verify-chain-key"
+	@echo "             verify-chain-key  verify-creditcoin"
 	@echo "  sepolia    deposit  accrue  harvest  source-status"
 	@echo "  creditcoin borrow  repay  settle  position"
 	@echo "  demo       demo  frontend-env  frontend-dev"
@@ -292,6 +297,25 @@ addresses:
 	    jq -r 'to_entries[] | "  \(.key) = \(.value)"' "$$f"; \
 	  done; echo ""; \
 	fi
+
+# Verifies the three Creditcoin contracts on Blockscout after the fact. `deploy-destination`
+# already passes --verify, so this is the recovery path for a deployment that predates it.
+#
+# --rpc-url is not optional. Without it forge assumes mainnet, its "already verified" check
+# queries the wrong chain, and it reports success while verifying nothing. --skip-is-verified-check
+# is there for the same reason.
+CC_VERIFY_ARGS = --rpc-url $(CREDITCOIN_RPC_URL) --skip-is-verified-check \
+                 --verifier blockscout --verifier-url $(BLOCKSCOUT_URL) --watch
+
+verify-creditcoin:
+	forge verify-contract $(RIYA_USD_ADDRESS) src/destination-chain/RiyaUSD.sol:RiyaUSD \
+	  --constructor-args $$(cast abi-encode "c(address)" $(LOAN_LEDGER_ADDRESS)) $(CC_VERIFY_ARGS)
+	forge verify-contract $(RIYA_ASC_ADDRESS) src/destination-chain/RiyaASC.sol:RiyaASC \
+	  --constructor-args $$(cast abi-encode "c(uint64,address,address,address)" \
+	    $(CHAIN_KEY) $(RIYA_ESCROW_ADDRESS) $(AAVE_V4_ADAPTER_ADDRESS) $(LOAN_LEDGER_ADDRESS)) $(CC_VERIFY_ARGS)
+	forge verify-contract $(LOAN_LEDGER_ADDRESS) src/destination-chain/LoanLedger.sol:LoanLedger \
+	  --constructor-args $$(cast abi-encode "c(address,address)" \
+	    $(RIYA_ASC_ADDRESS) $(RIYA_USD_ADDRESS)) $(CC_VERIFY_ARGS)
 
 # A record is written while the script runs, before its transactions confirm. A broadcast
 # that fails afterwards leaves a record of a deployment that is not on chain. This is the
