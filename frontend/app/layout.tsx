@@ -57,7 +57,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-void text-ink flex flex-col">
+      {/*
+        Browser extensions — Grammarly is the usual one — write attributes onto <body>
+        before React hydrates, which React then reports as a mismatch it will not patch.
+        It is not our markup and there is nothing to fix in it. This suppresses the warning
+        for this element's own attributes only; mismatches in anything nested still report.
+      */}
+      <body
+        suppressHydrationWarning
+        className="min-h-full bg-void text-ink flex flex-col"
+      >
         <Providers>{children}</Providers>
       </body>
     </html>
