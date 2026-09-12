@@ -23,6 +23,7 @@ export
         deploy-mocks deploy-source deploy-destination deploy-all addresses verify-addresses verify-chain-key verify-creditcoin clean-deployments \
         deposit accrue harvest source-status sender senders unlock preflight require-sender \
         borrow repay settle position \
+        deploy-impostor attack attack-deposit prove-attack \
         demo frontend-env frontend-contracts frontend-e2e frontend-dev frontend-build anvil
 
 SHELL := /bin/bash
@@ -82,6 +83,7 @@ help:
 	@echo "             verify-chain-key  verify-creditcoin"
 	@echo "  sepolia    deposit  accrue  harvest  source-status"
 	@echo "  creditcoin borrow  repay  settle  position"
+	@echo "  attack     deploy-impostor  attack  attack-deposit  prove-attack"
 	@echo "  demo       demo  frontend-env  frontend-dev"
 	@echo ""
 	@echo "  Keys come from the Foundry keystore: $(DEPLOYER_ACCOUNT), $(KEEPER_ACCOUNT), $(WORKER_ACCOUNT)."
@@ -261,6 +263,8 @@ CHAIN_INFO_PRECOMPILE := 0x0000000000000000000000000000000000000fD3
 # Sepolia's key in Creditcoin Testnet's registry, and the chain id it must resolve to.
 # `.env` wins if it sets CHAIN_KEY, since the worker reads the same variable.
 CHAIN_KEY             ?= 1
+# Sepolia. `.env` wins if it sets this, as the worker reads the same variable.
+SOURCE_CHAIN_ID       ?= 11155111
 CHAIN_KEY_EXPECTS     := 11155111
 
 verify-chain-key:
@@ -385,6 +389,49 @@ position:
 
 # The run order. Steps 2 and 5 wait on Creditcoin attesting the Sepolia block, so
 # start the worker first and do the deposit before you start presenting.
+# ---------------------------------------------------------------------------
+# Adversarial demo
+#
+# Event signatures are public, so anyone can emit `TokensHarvested` with a value of one
+# billion and get a perfectly valid Attestcoin proof for it: the transaction is real, it
+# succeeds, and the log really is in the block. Every cryptographic check passes.
+#
+# `log.address_` is the one field a forger cannot control, and `RiyaASC._dispatch` pins it.
+# This sequence proves that on a live chain rather than in a unit test.
+# ---------------------------------------------------------------------------
+
+# 1. Deploy the hostile contract. Records IMPOSTOR_ADDRESS, so the next targets find it.
+deploy-impostor: require-sender
+	forge script script/interactions/AttackDemo.s.sol:DeployImpostor $(SEPOLIA_ARGS) -vvv
+
+# 2. Emit a forged harvest. Succeeds — emitting an event is not a lie a chain can catch.
+attack: require-sender
+	@if [ -z "$(IMPOSTOR_ADDRESS)" ]; then \
+	  echo "IMPOSTOR_ADDRESS is not set. Run: make deploy-impostor"; exit 1; fi
+	forge script script/interactions/AttackDemo.s.sol:ForgeHarvest $(SEPOLIA_ARGS) -vvv
+
+# Collateral from nothing, rather than yield from nothing. USER=0x... to credit someone else.
+attack-deposit: require-sender
+	@if [ -z "$(IMPOSTOR_ADDRESS)" ]; then \
+	  echo "IMPOSTOR_ADDRESS is not set. Run: make deploy-impostor"; exit 1; fi
+	forge script script/interactions/AttackDemo.s.sol:ForgeDeposit $(SEPOLIA_ARGS) -vvv
+
+# 3. Carry the forged proof to RiyaASC and watch it bounce.
+#
+# TX defaults to the last transaction the attack broadcast, so there is no hash to copy
+# under pressure. Pass TX=0x... to prove a specific one.
+#
+# The worker's own key signs, because an attacker holding tCTC is the threat model — being
+# the worker confers nothing. A SUCCESS here would be a critical bug; the revert is the result.
+ATTACK_BROADCAST := broadcast/AttackDemo.s.sol/$(SOURCE_CHAIN_ID)/run-latest.json
+TX ?= $(shell [ -f $(ATTACK_BROADCAST) ] && jq -r '.transactions[-1].hash // empty' $(ATTACK_BROADCAST) 2>/dev/null)
+
+prove-attack:
+	@if [ -z "$(TX)" ]; then \
+	  echo "No forged transaction found. Run 'make attack' first, or pass TX=0x..."; exit 1; fi
+	@echo "  proving $(TX)"
+	@$(WORKER_KEY) npm --prefix offchain run attack -- $(TX)
+
 demo:
 	@echo "  0.  make worker            # in another terminal, leave it running"
 	@echo "  1.  make deposit           # Sepolia. real money, real event"

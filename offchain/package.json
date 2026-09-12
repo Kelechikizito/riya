@@ -8,6 +8,7 @@
     "abi": "tsx scripts/gen-abi.ts",
     "worker": "tsx src/worker.ts",
     "keeper": "tsx src/keeper.ts",
+    "attack": "tsx src/attack.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts"
   },
