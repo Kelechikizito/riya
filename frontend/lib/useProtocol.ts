@@ -1,6 +1,7 @@
 "use client";
 
 import { useReadContracts } from "wagmi";
+import { creditcoinTestnet } from "./chains";
 import { ADDRESSES, isLive, loanLedgerAbi, riyaUsdAbi } from "./contracts";
 import { DEMO_PROTOCOL } from "./demo";
 
@@ -33,7 +34,13 @@ export type ProtocolState = {
 /** Protocol-wide totals. Needs no wallet, since none of it is per-user. */
 export function useProtocol(): ProtocolState {
   const ledger = ADDRESSES.loanLedger;
-  const ledgerContract = { address: ledger!, abi: loanLedgerAbi } as const;
+  // Pinned for the same reason as `usePosition`: these live on Creditcoin regardless of
+  // where the wallet is pointed, and an unpinned read quietly falls back to demo numbers.
+  const ledgerContract = {
+    address: ledger!,
+    abi: loanLedgerAbi,
+    chainId: creditcoinTestnet.id,
+  } as const;
 
   const { data, isLoading } = useReadContracts({
     allowFailure: false,
@@ -41,7 +48,12 @@ export function useProtocol(): ProtocolState {
       { ...ledgerContract, functionName: "s_totalCollateral" },
       { ...ledgerContract, functionName: "s_protocolFees" },
       { ...ledgerContract, functionName: "s_yieldPerShare" },
-      { address: ADDRESSES.riyaUsd!, abi: riyaUsdAbi, functionName: "totalSupply" },
+      {
+        address: ADDRESSES.riyaUsd!,
+        abi: riyaUsdAbi,
+        functionName: "totalSupply",
+        chainId: creditcoinTestnet.id,
+      },
     ],
     query: { enabled: Boolean(ledger && ADDRESSES.riyaUsd), refetchInterval: 15_000 },
   });

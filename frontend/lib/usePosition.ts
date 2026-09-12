@@ -1,6 +1,7 @@
 "use client";
 
 import { useAccount, useReadContract, useReadContracts } from "wagmi";
+import { creditcoinTestnet } from "./chains";
 import {
   ADDRESSES,
   ASSUMED_YIELD_RATE_BPS,
@@ -55,7 +56,16 @@ export function usePosition(): PositionState {
   const enabled = Boolean(ledger && address);
 
   // The ledger reads share one ABI, which keeps wagmi's tuple inference happy.
-  const ledgerContract = { address: ledger!, abi: loanLedgerAbi } as const;
+  //
+  // `chainId` is not optional here. Without it wagmi reads from whatever chain the wallet
+  // happens to be on, and a deposit leaves it on Sepolia — where `LoanLedger` does not
+  // exist, so every read fails and the hook silently serves the demo dataset instead of
+  // the user's real position. riya is two-sided; a dashboard read has to name its side.
+  const ledgerContract = {
+    address: ledger!,
+    abi: loanLedgerAbi,
+    chainId: creditcoinTestnet.id,
+  } as const;
 
   const { data, isLoading } = useReadContracts({
     allowFailure: false,
@@ -80,6 +90,7 @@ export function usePosition(): PositionState {
   const { data: rUsdBalance } = useReadContract({
     address: ADDRESSES.riyaUsd,
     abi: erc20Abi,
+    chainId: creditcoinTestnet.id,
     functionName: "balanceOf",
     args: [address!],
     query: {
