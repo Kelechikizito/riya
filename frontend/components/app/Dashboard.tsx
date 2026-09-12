@@ -22,8 +22,7 @@ export function Dashboard() {
   const { position, live, connected } = usePosition();
 
   const tier = tierForScore(Number(position.score));
-  const borrowCeiling =
-    (position.collateral * position.maxLtvBps) / 10_000n;
+  const borrowCeiling = (position.collateral * position.maxLtvBps) / 10_000n;
   const available =
     borrowCeiling > position.debt ? borrowCeiling - position.debt : 0n;
 
@@ -64,8 +63,8 @@ export function Dashboard() {
               </p>
               {position.pendingYield > 0n && (
                 <p className="mt-2 font-mono text-[12px] text-yield-300">
-                  {formatUsd(position.pendingYield)} proven, applied on your next
-                  action
+                  {formatUsd(position.pendingYield)} proven, applied on your
+                  next action
                 </p>
               )}
             </div>
@@ -76,9 +75,8 @@ export function Dashboard() {
 
           {years !== null ? (
             <p className="mt-5 text-[15px] leading-relaxed text-muted">
-              Gone in{" "}
-              <span className="text-ink">{formatDuration(years)}</span> at{" "}
-              {formatPercent(ASSUMED_YIELD_RATE_BPS, 1)} yield — without you
+              Gone in <span className="text-ink">{formatDuration(years)}</span>{" "}
+              at {formatPercent(ASSUMED_YIELD_RATE_BPS, 1)} yield — without you
               paying anything.
             </p>
           ) : (
@@ -99,8 +97,8 @@ export function Dashboard() {
               />
             </div>
             <p className="mt-2.5 font-mono text-[12px] text-faint">
-              {formatUsd(position.repaidByYield)} of{" "}
-              {formatUsd(totalDrawn)} drawn
+              {formatUsd(position.repaidByYield)} of {formatUsd(totalDrawn)}{" "}
+              drawn
             </p>
           </div>
         </div>
@@ -199,7 +197,9 @@ function Tile({
           </span>
         )}
       </div>
-      <p className={`mt-3 font-mono text-2xl tabular sm:text-[1.75rem] ${color}`}>
+      <p
+        className={`mt-3 font-mono text-2xl tabular sm:text-[1.75rem] ${color}`}
+      >
         {value}
       </p>
       {note && <p className="mt-2 text-[12px] text-faint">{note}</p>}
@@ -291,9 +291,15 @@ function BorrowPanel({
   const overLimit = mode === "borrow" && parsed !== null && parsed > available;
   // `repay` burns the caller's own rUSD, so the wallet has to hold what it offers to pay.
   // The contract clamps the amount to the debt, but `_burn` does not clamp to the balance.
-  const overBalance = mode === "repay" && parsed !== null && parsed > rUsdBalance;
+  const overBalance =
+    mode === "repay" && parsed !== null && parsed > rUsdBalance;
   const canSubmit =
-    connected && deployed && parsed !== null && parsed > 0n && !overLimit && !overBalance;
+    connected &&
+    deployed &&
+    parsed !== null &&
+    parsed > 0n &&
+    !overLimit &&
+    !overBalance;
 
   function submit() {
     if (!canSubmit || parsed === null) return;
@@ -310,7 +316,9 @@ function BorrowPanel({
             onClick={() => setMode(m)}
             aria-pressed={mode === m}
             className={`flex-1 cursor-pointer rounded-full px-4 py-2 text-sm font-medium capitalize transition-colors duration-200 ${
-              mode === m ? "bg-yield-300 text-void" : "text-muted hover:text-ink"
+              mode === m
+                ? "bg-yield-300 text-void"
+                : "text-muted hover:text-ink"
             }`}
           >
             {m}
@@ -348,7 +356,8 @@ function BorrowPanel({
       )}
       {overBalance && (
         <p className="mt-2.5 text-[12px] text-danger">
-          You hold {formatUsd(rUsdBalance)} of rUSD. Repayment burns your own tokens.
+          You hold {formatUsd(rUsdBalance)} of rUSD. Repayment burns your own
+          tokens.
         </p>
       )}
       {tx.status === "done" && (
@@ -391,7 +400,8 @@ function BorrowPanel({
         </p>
       ) : !connected ? (
         <p className="mt-3 text-center text-[11px] leading-relaxed text-faint">
-          Borrowing happens on Creditcoin. Connecting switches the network for you.
+          Borrowing happens on Creditcoin. Connecting switches the network for
+          you.
         </p>
       ) : null}
     </div>
@@ -406,8 +416,17 @@ function BorrowPanel({
  * answer is that Creditcoin has to attest the block first, and that wait is the product.
  */
 function DepositPanel() {
-  const { step, error, txHash, balance, allowance, minDeposit, available, deposit, reset } =
-    useDeposit();
+  const {
+    step,
+    error,
+    txHash,
+    balance,
+    allowance,
+    minDeposit,
+    available,
+    deposit,
+    reset,
+  } = useDeposit();
   const [amount, setAmount] = useState("");
 
   const parsed = useMemo(() => {
@@ -425,17 +444,20 @@ function DepositPanel() {
     step === "minting" ||
     step === "approving" ||
     step === "depositing";
-  const canSubmit = available && parsed !== null && parsed > 0n && !belowFloor && !busy;
+  const canSubmit =
+    available && parsed !== null && parsed > 0n && !belowFloor && !busy;
 
   return (
     <div className="card p-6 sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="eyebrow">Add collateral</p>
-          <h2 className="mt-2 text-[1.35rem] font-semibold">Deposit on Ethereum</h2>
+          <h2 className="mt-2 text-[1.35rem] font-semibold">
+            Deposit on Ethereum
+          </h2>
           <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted">
-            Your dollars stay on Ethereum earning Aave yield. Only a proof crosses to
-            Creditcoin, and that is what becomes your collateral.
+            Your dollars stay on Ethereum earning Aave yield. Only a proof
+            crosses to Creditcoin, and that is what becomes your collateral.
           </p>
         </div>
         <span className="rounded-full border border-yield-300/25 px-3 py-1 text-[11px] uppercase tracking-[0.14em] text-yield-300">
@@ -497,8 +519,8 @@ function DepositPanel() {
       )}
       {belowFloor && (
         <p className="mt-2.5 text-[12px] text-danger">
-          Below the {formatUsd(minDeposit)} floor. Every deposit costs the same to prove,
-          whatever its size.
+          Below the {formatUsd(minDeposit)} floor. Every deposit costs the same
+          to prove, whatever its size.
         </p>
       )}
       {error && <p className="mt-2.5 text-[12px] text-danger">{error}</p>}
@@ -509,9 +531,10 @@ function DepositPanel() {
             Deposited on Ethereum. Waiting for Creditcoin to attest the block.
           </p>
           <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
-            The readability worker proves the transaction through the Block Prover
-            Precompile once the block is attested. Your collateral appears above when it
-            does. Nothing here is bridged, and no tokens move between chains.
+            The readability worker proves the transaction through the Block
+            Prover Precompile once the block is attested. Your collateral
+            appears above when it does. Nothing here is bridged, and no tokens
+            move between chains.
           </p>
           {txHash && (
             <a
@@ -535,8 +558,8 @@ function DepositPanel() {
 
       {!available && (
         <p className="mt-4 text-[12px] leading-relaxed text-faint">
-          Enabled once RiyaEscrow and the demo dollar are deployed and their addresses are
-          set.
+          Enabled once RiyaEscrow and the demo dollar are deployed and their
+          addresses are set.
         </p>
       )}
     </div>
@@ -579,7 +602,8 @@ function ActivityFeed() {
         {events.map((event: ActivityEvent) => {
           const isHarvest = event.kind === "harvest";
           const isDeposit = event.kind === "deposit";
-          const tone = isHarvest || isDeposit ? "text-yield-300" : "text-credit-400";
+          const tone =
+            isHarvest || isDeposit ? "text-yield-300" : "text-credit-400";
           return (
             <li key={event.txHash} className="flex items-start gap-3">
               <span
@@ -624,7 +648,6 @@ function ActivityFeed() {
   );
 }
 
-
 /**
  * The Ethereum half of the loop, and the only write that is not about the caller.
  *
@@ -641,26 +664,34 @@ function HarvestPanel() {
       <p className="eyebrow">Ethereum</p>
       <h2 className="mt-3 text-lg font-semibold">Harvest the yield</h2>
       <p className="mt-2 text-[13px] leading-relaxed text-muted">
-        Aave rebases silently. Harvesting turns that into one transaction Creditcoin can
-        prove — which is the only way the loan learns it earned anything.
+        Aave rebases silently. Harvesting turns that into one transaction
+        Creditcoin can prove — which is the only way the loan learns it earned
+        anything.
       </p>
 
       <div className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-5">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.14em] text-faint">Accrued</p>
+          <p className="text-[11px] uppercase tracking-[0.14em] text-faint">
+            Accrued
+          </p>
           <p className="mt-1 font-mono text-lg tabular text-yield-300">
             {formatUsd(available)}
           </p>
         </div>
         <div>
-          <p className="text-[11px] uppercase tracking-[0.14em] text-faint">Floor</p>
-          <p className="mt-1 font-mono text-lg tabular text-muted">{formatUsd(floor)}</p>
+          <p className="text-[11px] uppercase tracking-[0.14em] text-faint">
+            Floor
+          </p>
+          <p className="mt-1 font-mono text-lg tabular text-muted">
+            {formatUsd(floor)}
+          </p>
         </div>
       </div>
 
       {!ready && (
         <p className="mt-4 text-[12px] leading-relaxed text-faint">
-          Below the floor, so the adapter would revert rather than spend gas on dust.
+          Below the floor, so the adapter would revert rather than spend gas on
+          dust.
         </p>
       )}
       {tx.status === "done" && (
