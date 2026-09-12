@@ -20,7 +20,7 @@ const RISKS: readonly Risk[] = [
   },
   {
     title: "This is unaudited testnet software",
-    body: "Built inside a hackathon window. It has fork tests on the Ethereum contracts and no external audit on either. An audit is the first item in Phase 1 for exactly this reason. Do not put anything you cannot lose in front of it.",
+    body: "Built inside a hackathon window. It has fork tests on the Ethereum contracts and no external audit. An audit is the first item in Phase 1 for exactly this reason. Do not put anything you cannot lose in front of it.",
   },
 ];
 

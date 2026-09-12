@@ -22,7 +22,7 @@ const PHASES = [
     body: "Everything needed before anyone's real money is welcome.",
     items: [
       "External audits",
-      "Batched harvests tuned to Ethereum mainnet gas.",
+      "Batched harvests tuned to Ethereum mainnet gas",
       "Proven impairment marks, so an Aave loss prices into collateral and stops backing new borrowing instead of accruing silently",
       "Permissionless readability watchers, so no single operator can stall proofs",
       "More collateral assets and additional yield adapters behind IYieldAdapter",
@@ -33,10 +33,10 @@ const PHASES = [
     status: "planned",
     horizon: "Ecosystem",
     title: "Make rUSD worth holding",
-    body: "his phase is about the Creditcoin side of the ledger becoming valuable.",
+    body: "This phase is about the Creditcoin side of the ledger becoming valuable.",
     items: [
       "rUSD liquidity on Creditcoin DEXes",
-      "Riya's credit score exposed as a public read-only other Creditcoin protocols can price against",
+      "Riya's credit score exposed as a public read-only primitive other Creditcoin protocols can price against",
       "Delegated borrowing, lend your unused limit to an address you trust",
       "Merchant and payment rails for rUSD",
     ],
@@ -49,7 +49,7 @@ const PHASES = [
     body: "These need Creditcoin features that are not released yet.",
     items: [
       "Collateral release back to Ethereum, needs writability, currently in third-party audit",
-      "Additional source chains asides Ethereum Mainnet",
+      "Additional source chains besides Ethereum Mainnet",
       "Cross-chain liquidation-free refinancing between destinations",
     ],
   },

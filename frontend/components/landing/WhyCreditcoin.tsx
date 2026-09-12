@@ -24,7 +24,7 @@ const PILLARS = [
   },
   {
     title: "Nothing waits on writability",
-    body: "Every proof travels inbound: Ethereum to Creditcoin. Riya V1 needs no outbound message, so nothing in the product is blocked on writabliity.",
+    body: "Every proof travels inbound: Ethereum to Creditcoin. Riya V1 needs no outbound message, so nothing in the product is blocked on writability.",
     mono: "readability only",
     icon: "arrow",
     side: "yield",

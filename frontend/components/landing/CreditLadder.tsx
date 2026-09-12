@@ -24,7 +24,7 @@ export function CreditLadder() {
       id="credit"
       eyebrow="Credit score"
       title="A limit you earn"
-      lede="Your borrow limit starts at 10% and climbs to 50%. It moves on account that yield retires your debt. Cash repayments do not count."
+      lede="Your borrow limit starts at 10% and climbs to 50%. It moves for one reason: yield retiring your debt. Cash repayments do not count."
     >
       <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
         {/* ------------------------------------------------- interactive dial */}
@@ -32,7 +32,7 @@ export function CreditLadder() {
           <p className="eyebrow">Try it</p>
           <label
             htmlFor={sliderId}
-            className="mt-3 block text-[15px] leading-relaxed text-bold"
+            className="mt-3 block text-[15px] leading-relaxed font-bold"
           >
             On $1,000 of collateral, drag to change how much debt your{" "}
             <span className="text-yield-300">yield</span> has retired.

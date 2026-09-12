@@ -26,7 +26,7 @@ const STEPS = [
     chain: "Ethereum",
     side: "yield",
     title: "Deposit USDC into the escrow",
-    body: "Approve the escrow, then deposit. There is a minimum deposit, small deposits cost more in gas than they are worth. Once this lands, your collateral is in Aave and earning.",
+    body: "Approve the escrow, then deposit. There is a minimum deposit: small deposits cost more in gas than they are worth. Once this lands, your collateral is in Aave and earning.",
   },
   {
     n: 3,
@@ -34,7 +34,7 @@ const STEPS = [
     chain: "Creditcoin",
     side: "credit",
     title: "Wait for the proof to land",
-    body: "You do nothing here. A readeability worker picks up your deposit event, waits for the Ethereum block to be final enough to prove, and submits it to Riya's ASC on Creditcoin. Your dashboard flips from pending to credited when the ledger has it.",
+    body: "You do nothing here. A readability worker picks up your deposit event, waits for the Ethereum block to be final enough to prove, and submits it to Riya's ASC on Creditcoin. Your dashboard flips from pending to credited when the ledger has it.",
   },
   {
     n: 4,
@@ -60,7 +60,7 @@ export function Onboarding() {
       id="start"
       eyebrow="Onboarding guide"
       title="Your first ten minutes"
-      lede="Five steps, two chains. For V1, everything below is on testnet, no real funds are involved."
+      lede="Five steps, two chains. For V1, everything below is on testnet: no real funds are involved."
     >
       <div className="grid gap-4 lg:grid-cols-[1fr_1.6fr]">
         {/* ------------------------------------------------------ checklist */}

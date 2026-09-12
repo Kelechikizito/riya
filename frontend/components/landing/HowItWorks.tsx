@@ -28,7 +28,7 @@ const STEPS = [
     side: "credit",
     chain: "Creditcoin",
     title: "You borrow $100 — 10% to start",
-    body: "New addresses open at a 10% limit and mint rUSD against the collateral. The limit is a credit score you have not used yet, increses with your usage of Riya.",
+    body: "New addresses open at a 10% limit and mint rUSD against the collateral. The limit is a credit score you have not used yet, and it increases with your usage of Riya.",
     figure: "$100.00",
     figureLabel: "rUSD minted",
   },
