@@ -4,11 +4,12 @@ import { useCallback, useState } from "react";
 import { sepolia } from "wagmi/chains";
 import {
   useAccount,
+  useConfig,
   useReadContract,
   useSwitchChain,
   useWriteContract,
 } from "wagmi";
-import { useWaitForTransactionReceipt } from "wagmi";
+import { waitForTransactionReceipt } from "wagmi/actions";
 import { ADDRESSES, canDeposit, mockUsdAbi, riyaEscrowAbi } from "./contracts";
 
 /** Where a deposit has got to. The wait between `proving` and `done` is Creditcoin's. */
@@ -28,6 +29,8 @@ export type DepositState = {
   /** The deposit transaction, once sent. Ethereum, not Creditcoin. */
   txHash: `0x${string}` | undefined;
   balance: bigint;
+  /** What the escrow may already move. Decides whether an approval is needed at all. */
+  allowance: bigint;
   minDeposit: bigint;
   available: boolean;
   onSepolia: boolean;
@@ -50,6 +53,7 @@ export function useDeposit(): DepositState {
   const { address, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
+  const config = useConfig();
 
   const [step, setStep] = useState<DepositStep>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -66,18 +70,29 @@ export function useDeposit(): DepositState {
     query: { enabled: Boolean(ADDRESSES.mockUsd && address), refetchInterval: 15_000 },
   });
 
+  /**
+   * Already-granted allowance. Read so the approval can be skipped when it is not needed:
+   * re-approving an amount the escrow can already move is a wallet prompt that buys
+   * nothing, and every extra prompt is another place a demo stalls.
+   */
+  const { data: allowance } = useReadContract({
+    address: ADDRESSES.mockUsd,
+    abi: mockUsdAbi,
+    functionName: "allowance",
+    args: [address!, ADDRESSES.escrow!],
+    chainId: sepolia.id,
+    query: {
+      enabled: Boolean(ADDRESSES.mockUsd && ADDRESSES.escrow && address),
+      refetchInterval: 15_000,
+    },
+  });
+
   const { data: minDeposit } = useReadContract({
     address: ADDRESSES.escrow,
     abi: riyaEscrowAbi,
     functionName: "I_MIN_DEPOSIT",
     chainId: sepolia.id,
     query: { enabled: Boolean(ADDRESSES.escrow) },
-  });
-
-  useWaitForTransactionReceipt({
-    hash: txHash,
-    chainId: sepolia.id,
-    query: { enabled: Boolean(txHash) },
   });
 
   const deposit = useCallback(
@@ -89,6 +104,21 @@ export function useDeposit(): DepositState {
       setError(null);
       setTxHash(undefined);
 
+      /**
+       * Send one transaction and wait for it to be mined.
+       *
+       * The wait is load-bearing, not politeness. `writeContractAsync` resolves when a
+       * transaction is *submitted*, so firing all three back to back meant `deposit` was
+       * simulated while `mint` and `approve` were still pending — the escrow saw no
+       * balance and no allowance, gas estimation reverted, and the wallet never prompted
+       * for the third transaction at all. The flow appeared to stop after the approval.
+       */
+      const send = async (request: Parameters<typeof writeContractAsync>[0]) => {
+        const hash = await writeContractAsync(request);
+        await waitForTransactionReceipt(config, { hash, chainId: sepolia.id });
+        return hash;
+      };
+
       try {
         if (!onSepolia) {
           setStep("switching");
@@ -99,7 +129,7 @@ export function useDeposit(): DepositState {
         // second deposit is two transactions rather than three.
         if ((balance ?? 0n) < amount) {
           setStep("minting");
-          await writeContractAsync({
+          await send({
             address: usd,
             abi: mockUsdAbi,
             functionName: "mint",
@@ -108,17 +138,19 @@ export function useDeposit(): DepositState {
           });
         }
 
-        setStep("approving");
-        await writeContractAsync({
-          address: usd,
-          abi: mockUsdAbi,
-          functionName: "approve",
-          args: [escrow, amount],
-          chainId: sepolia.id,
-        });
+        if ((allowance ?? 0n) < amount) {
+          setStep("approving");
+          await send({
+            address: usd,
+            abi: mockUsdAbi,
+            functionName: "approve",
+            args: [escrow, amount],
+            chainId: sepolia.id,
+          });
+        }
 
         setStep("depositing");
-        const hash = await writeContractAsync({
+        const hash = await send({
           address: escrow,
           abi: riyaEscrowAbi,
           functionName: "deposit",
@@ -134,7 +166,7 @@ export function useDeposit(): DepositState {
         setStep("error");
       }
     },
-    [address, balance, onSepolia, switchChainAsync, writeContractAsync],
+    [address, allowance, balance, config, onSepolia, switchChainAsync, writeContractAsync],
   );
 
   const reset = useCallback(() => {
@@ -148,6 +180,7 @@ export function useDeposit(): DepositState {
     error,
     txHash,
     balance: balance ?? 0n,
+    allowance: allowance ?? 0n,
     minDeposit: minDeposit ?? 100_000_000n,
     available: canDeposit(),
     onSepolia,

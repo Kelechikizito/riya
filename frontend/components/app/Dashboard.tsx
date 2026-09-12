@@ -406,7 +406,7 @@ function BorrowPanel({
  * answer is that Creditcoin has to attest the block first, and that wait is the product.
  */
 function DepositPanel() {
-  const { step, error, txHash, balance, minDeposit, available, deposit, reset } =
+  const { step, error, txHash, balance, allowance, minDeposit, available, deposit, reset } =
     useDeposit();
   const [amount, setAmount] = useState("");
 
@@ -479,6 +479,22 @@ function DepositPanel() {
         <span>Minimum: {formatUsd(minDeposit)}</span>
       </div>
 
+      {busy && (
+        <p className="mt-2.5 text-[12px] leading-relaxed text-muted">
+          Waiting on your wallet. If no prompt appeared, open the wallet
+          extension — a queued request does not always raise its own window.
+        </p>
+      )}
+      {!busy && parsed !== null && !belowFloor && (
+        <p className="mt-2.5 text-[12px] text-faint">
+          {(balance >= parsed ? 0 : 1) + (allowance >= parsed ? 0 : 1) + 1} wallet{" "}
+          {(balance >= parsed ? 0 : 1) + (allowance >= parsed ? 0 : 1) + 1 === 1
+            ? "confirmation"
+            : "confirmations"}
+          : {balance >= parsed ? "" : "mint, "}
+          {allowance >= parsed ? "" : "approve, "}deposit.
+        </p>
+      )}
       {belowFloor && (
         <p className="mt-2.5 text-[12px] text-danger">
           Below the {formatUsd(minDeposit)} floor. Every deposit costs the same to prove,
