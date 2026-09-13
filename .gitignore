@@ -13,8 +13,11 @@ out/
 /docs/*
 !/docs/brand-guidelines.md
 
-# Dotenv file
+# Dotenv file. The glob catches backups and per-environment variants; the negation keeps the
+# committed template. A stray `.env.bak` holding an API key is the leak this prevents.
 .env
+.env.*
+!.env.example
 
 # Optional keystore password file for unattended deploys (see the Makefile)
 .keystore-password
